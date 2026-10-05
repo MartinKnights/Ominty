@@ -1,5 +1,10 @@
 # Installation Guide
 
+This guide covers a **clean install**. If the machine already runs a desktop
+(Cinnamon, GNOME, …) and the user wants to keep any of it, follow
+[`MIGRATION.md`](MIGRATION.md) instead — that path assesses the incumbent
+environment and preserves whatever is not deliberately replaced.
+
 ## Requirements
 
 - **Debian 13 (Trixie)** or **LMDE 7** (the reference platform). Other

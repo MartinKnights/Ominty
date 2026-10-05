@@ -1,12 +1,44 @@
-# AGENTS.md — installing Ominty
+# AGENTS.md — installing or migrating to Ominty
 
-This file is the entry point for **any agent installing Ominty on a user's
-machine**. It replaces guessing with a defined sequence: inspect, ask, plan,
+This file is the entry point for **any agent deploying Ominty on a user's
+machine** — installing it onto a clean system, or migrating an existing desktop
+to it. It replaces guessing with a defined sequence: assess, inspect, ask, plan,
 apply, verify.
 
-If you are *developing Ominty* rather than installing it, read
+If you are *developing Ominty* rather than deploying it, read
 [`ominty-core/AGENTS.md`](ominty-core/AGENTS.md) instead. That file governs the
-implementation contracts. This one governs installation.
+implementation contracts. This one governs deployment.
+
+---
+
+## 0. The project has two halves
+
+Ominty is developed and deployed on the same machine. Keep the two apart, and
+never let the second leak the first.
+
+| | Objective | Where it lives |
+| --- | --- | --- |
+| **1. Develop** | Build and validate Ominty on the live PC — registry, CLI, DMS plugins, theming, AI, keyboard grammar. | `ominty-core/` and the live machine's configuration |
+| **2. Distribute** | Turn what was validated on the live PC into a reproducible, generic install/migration process for the repo. | this file, `install.sh`, `configs/`, `docs/` |
+
+**Objective 1 feeds objective 2.** Nothing belongs in the installer until it has
+worked on the live machine; every change that does work there is a candidate for
+the repo. Objective 2 must stay generic — no personal paths, no machine-specific
+assumptions (see `ominty-core/AGENTS.md` §33).
+
+### Install or migrate?
+
+A machine that already runs a desktop (Cinnamon, GNOME, …) is **migrated**, not
+overwritten. A clean machine is **installed**. The migration path is
+**migration-first**:
+
+1. **assess** the incumbent environment — what the user actually runs and wants
+   to keep;
+2. **infer, then confirm** each mapping with the user;
+3. **preserve** everything that is not deliberately replaced, with a backup.
+
+The migration is recorded in [`docs/MIGRATION.md`](docs/MIGRATION.md). A clean
+machine skips straight to §3.
 
 ---
 
@@ -55,6 +87,12 @@ ominty-core/cli/ominty inspect            # the same report, for humans
 ```
 
 Then work through sections 4 to 8 below in order.
+
+**Migrating a machine that already has a desktop?** Assess the incumbent
+environment *before* section 6, so the required choices are informed by what the
+user already runs. Follow [`docs/MIGRATION.md`](docs/MIGRATION.md): inventory the
+incumbent session, map its settings to their Niri equivalents, and confirm each
+mapping before replacing anything.
 
 Do not run `install.sh` until you have completed section 6.
 
