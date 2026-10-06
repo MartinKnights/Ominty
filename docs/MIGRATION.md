@@ -220,7 +220,48 @@ over cleanly without manual cleanup.
 
 ---
 
-## 8. Verifying the migration
+## 8. Wallpapers and theming
+
+Wallpapers are a user preference that must be gathered, not dropped. The
+wallpaper carousel and the theme (matugen) both expect every wallpaper to
+live in one folder. This is the assess → provision → verify sequence the
+installer should run:
+
+1. **Assess** — locate the incumbent desktop's wallpapers. On Mint the system
+   sets live in `/usr/share/backgrounds/<set>/` (six sets here: `linuxmint`,
+   `vanessa`, `vera`, `victoria`, `virginia`, `linuxmint-wallpapers` — 147
+   images); the active one is the display manager's background (Cinnamon:
+   `gsettings get org.cinnamon.desktop.background picture-uri`). Treat folders
+   such as `~/Pictures` as photos, not wallpapers, unless the user overrides.
+2. **Provision** — create `~/Wallpapers/` and symlink every **unique** image
+   into it. Checksum-dedupe (the Mint sets share images) and prefix the set
+   name so equal files from different sets do not collide:
+
+   ```sh
+   mkdir -p ~/Wallpapers
+   # per unique image:
+   ln -s /usr/share/backgrounds/<set>/<file> ~/Wallpapers/<set>-<file>
+   ```
+
+   Convert any previously *copied* files in `~/Wallpapers` back to symlinks so
+   system wallpaper updates are picked up.
+3. **Verify** — the DMS "Wallpaper Carousel" plugin reads its
+   `wallpaperDirectory` setting (default `~/Wallpapers`); `Ctrl+Super+P`
+   (`Mod+Ctrl+P`) must open the fullscreen carousel showing the folder. Picking
+   one applies it and regenerates the theme:
+
+   ```text
+   pick → WallpaperService.changeWallpaper
+        → dankHooks onWallpaperChanged
+        → ominty-hook → theme.palette.regenerate (matugen)
+   ```
+
+   The carousel replies `opened` to its IPC toggle; "working" means the picker
+   appears, not that it auto-cycles.
+
+---
+
+## 9. Verifying the migration
 
 Connector names and geometry are **identical** between the X11 and Niri
 sessions on the reference machine, so the output layout does not need
@@ -238,11 +279,12 @@ session:
 - the ported `spawn-at-startup` apps are running;
 - each script shortcut responds;
 - the clipboard helper round-trips (`clip-tool copy` then `clip-tool paste`);
-- `swayidle` locks the screen after the idle timeout, and on suspend.
+- `swayidle` locks the screen after the idle timeout, and on suspend;
+- the wallpaper carousel opens with `Ctrl+Super+P` (§8).
 
 ---
 
-## 9. Known limitations
+## 10. Known limitations
 
 - **Qt-style SNI tray icons do not appear** (Vorta, KeePassXC, Mullvad, Update
   Manager). Quickshell 0.3.1 cannot load them; a fix belongs in Quickshell or in
