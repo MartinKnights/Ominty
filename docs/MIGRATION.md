@@ -293,3 +293,21 @@ session:
   floating window rules and close-to-background (§3).
 - **No PRIMARY selection** under Wayland, so "select then act" tools lose the
   selection; they must be reworked to read the regular clipboard.
+
+---
+
+## 11. Desktop tools (third-party)
+
+- **NiriMod** (`github.com/srinivasr/nirimod`) — GUI config editor for Niri
+  (monitor layout, keybindings, layout/gaps, easing curves, KDL editing).
+  Installed 2026-10-08: `~/.local/share/nirimod` (source + venv), launcher
+  `~/.local/bin/nirimod`, app-menu entry. All writes pass `niri validate`;
+  resolves `include` files up to 5 levels, so it edits `config.kdl` / the
+  `dms/*.kdl` fragments per-file without clobbering them. Requires the
+  runtime typelibs `gir1.2-gtk-4.0` + `gir1.2-adw-1`:
+
+  ```sh
+  sudo apt-get install -y gir1.2-gtk-4.0 gir1.2-adw-1
+  ```
+
+  Safety snapshot before first use: `~/.config/niri.bak-ominty-20261008`.
