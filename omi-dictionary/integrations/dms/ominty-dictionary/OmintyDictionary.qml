@@ -258,35 +258,55 @@ PluginComponent {
                         Layout.fillWidth: true
                         spacing: Theme.spacingM
 
-                        TextField {
-                            id: searchField
+                        Rectangle {
+                            id: searchBox
                             Layout.fillWidth: true
                             Layout.preferredHeight: 38
-                            placeholderText: "Define…  (↑/↓ candidates · Enter lookup)"
-                            color: "white"
-                            placeholderTextColor: Theme.surfaceVariantText
-                            leftPadding: Theme.spacingM
-                            rightPadding: Theme.spacingM
-                            background: Rectangle {
-                                color: "transparent"; radius: 6
-                                border.width: 1; border.color: Theme.outline
-                            }
-                            text: root._query
-                            onTextChanged: { root._query = searchField.text; debounce.restart(); }
-                            Keys.onPressed: event => {
-                                if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
-                                    const w = (root._candidateIndex >= 0 && root._candidateIndex < root._candidates.length)
-                                        ? root._candidates[root._candidateIndex] : searchField.text;
-                                    root._candidates = [];
-                                    root._lookup(w);
-                                    event.accepted = true;
-                                } else if (event.key === Qt.Key_Down && root._candidates.length) {
-                                    root._candidateIndex = (root._candidateIndex + 1) % root._candidates.length;
-                                    event.accepted = true;
-                                } else if (event.key === Qt.Key_Up && root._candidates.length) {
-                                    root._candidateIndex = (root._candidateIndex - 1 + root._candidates.length) % root._candidates.length;
-                                    event.accepted = true;
+                            radius: 6
+                            color: "transparent"
+                            border.width: 1
+                            border.color: Theme.outline
+                            clip: false
+
+                            TextInput {
+                                id: searchField
+                                anchors.fill: parent
+                                anchors.leftMargin: Theme.spacingM
+                                anchors.rightMargin: Theme.spacingM
+                                verticalAlignment: TextInput.AlignVCenter
+                                color: "white"
+                                text: root._query
+                                clip: false
+                                onTextChanged: { root._query = searchField.text; debounce.restart(); }
+                                Keys.onPressed: event => {
+                                    if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
+                                        const w = (root._candidateIndex >= 0 && root._candidateIndex < root._candidates.length)
+                                            ? root._candidates[root._candidateIndex] : searchField.text;
+                                        root._candidates = [];
+                                        root._lookup(w);
+                                        event.accepted = true;
+                                    } else if (event.key === Qt.Key_Down && root._candidates.length) {
+                                        root._candidateIndex = (root._candidateIndex + 1) % root._candidates.length;
+                                        event.accepted = true;
+                                    } else if (event.key === Qt.Key_Up && root._candidates.length) {
+                                        root._candidateIndex = (root._candidateIndex - 1 + root._candidates.length) % root._candidates.length;
+                                        event.accepted = true;
+                                    }
                                 }
+                            }
+
+                            StyledText {
+                                visible: searchField.text === ""
+                                anchors.left: parent.left
+                                anchors.leftMargin: Theme.spacingM
+                                anchors.verticalCenter: parent.verticalCenter
+                                text: "Define…  (↑/↓ candidates · Enter lookup)"
+                                color: Theme.surfaceVariantText
+                            }
+
+                            MouseArea {
+                                anchors.fill: parent
+                                onClicked: searchField.forceActiveFocus()
                             }
                         }
 
