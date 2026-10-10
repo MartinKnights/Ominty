@@ -19,6 +19,14 @@ The `omi-dict` CLI must work with no Niri/DMS present.
 
 Run: `python3 -m pytest tests/` from `omi-dictionary/`.
 
+## Verified on the reference machine (2026-10-10)
+
+- Import + index: OED 2nd ed 336,273 headwords; etymology/roget/wordfamilies.
+- Exact lookup ~75 ms cold; search ~84 ms; All mode returns 3 dictionaries.
+- `text.define` action → `omi-dict selection --popup` → `omintyDictionary`
+  popup (IPC verified).  Niri config valid; registry 0 errors/0 warnings.
+- 14 module tests (engine, CLI, selection, search, unicode, malformed).
+
 ## Selection matrix (Phase 5)
 
 Application → selection method → success/failure → clipboard side effects →

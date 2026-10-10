@@ -36,5 +36,5 @@ Selected Text → omi-selection → omi-dict (core) → registry → [OED, Roget
 
 ## Status
 
-Phase 1 (dictionary PoC) is in progress.  See `docs/architecture.md` and the
+All v1 phases are complete (PoC → popup).  See `docs/architecture.md`.  See `docs/architecture.md` and the
 project `PROGRESS.md` change log.

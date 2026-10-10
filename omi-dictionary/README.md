@@ -30,5 +30,7 @@ it is discovered automatically).  Source `.bgl` files are imported with
 
 ## Status
 
-Phase 1 (dictionary proof of concept) in progress.  See `docs/architecture.md`
-and `AGENT.md`.
+**v1 complete** (all phases in `docs/architecture.md`).  Select a word →
+`Ctrl+Shift+A` → DMS dictionary popup with the OED entry; or use the CLI
+(`omi-dict lookup/search/dictionaries/selection`).  Verified against the OED
+2nd Edition (336k headwords), Online Etymology, Roget and Word Families.

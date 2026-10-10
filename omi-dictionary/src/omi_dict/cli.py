@@ -129,17 +129,95 @@ def build_parser() -> argparse.ArgumentParser:
     l_p.add_argument("--json", action="store_true")
     l_p.set_defaults(func=cmd_lookup)
 
-    s_p = sub.add_parser("search", help="search candidate headwords (Phase 3)")
+    s_p = sub.add_parser("search", help="candidate headwords for a prefix (spec §10)")
     s_p.add_argument("prefix")
     s_p.add_argument("--dictionary")
+    s_p.add_argument("--all", action="store_true", help="candidates from all dictionaries")
+    s_p.add_argument("--limit", type=int, default=40, help="max candidates (default 40)")
     s_p.add_argument("--json", action="store_true")
-    s_p.set_defaults(func=lambda a: _not_yet(a, "search"))
+    s_p.set_defaults(func=cmd_search)
+
+    sel_p = sub.add_parser(
+        "selection", help="print (or look up) the currently selected text (spec §8)"
+    )
+    sel_p.add_argument("--popup", action="store_true",
+                       help="open the DMS dictionary popup with the selection")
+    sel_p.add_argument("--json", action="store_true")
+    sel_p.set_defaults(func=cmd_selection)
     return p
 
 
-def _not_yet(args: argparse.Namespace, what: str) -> int:
-    print(f"{what}: not implemented yet (Phase 3/4)", file=sys.stderr)
-    return 2
+def cmd_selection(args: argparse.Namespace) -> int:
+    """Print the currently selected text (spec §8, §12)."""
+    from .errors import SelectionUnavailable
+    from .selection import selected_text
+
+    try:
+        text = selected_text()
+    except SelectionUnavailable as exc:
+        if args.popup:
+            # Spec §15/§17: still open the popup so the user can type a word.
+            return open_popup("")
+        if getattr(args, "json", False):
+            return _out({"error": exc.code, "message": str(exc)}, True)
+        print(f"omi-dict: {exc}", file=sys.stderr)
+        return 1
+    if args.popup:
+        # Phase 7: open the DMS dictionary popup with the selected word.
+        return open_popup(text)
+    if args.json:
+        return _out({"text": text}, True)
+    print(text)
+    return 0
+
+
+def open_popup(word: str) -> int:
+    """Ask DMS to open the omintyDictionary popup for a word (Phase 7)."""
+    import shutil
+    import subprocess
+
+    if not shutil.which("dms"):
+        print(f"omi-dict: no DMS session — selected word: {word}", file=sys.stderr)
+        return 1
+    proc = subprocess.run(
+        ["dms", "ipc", "call", "omintyDictionary", "openWith", word],
+        capture_output=True, text=True, timeout=5,
+    )
+    if proc.returncode != 0:
+        print(f"omi-dict: dms popup failed: {proc.stderr.strip()}", file=sys.stderr)
+        return 1
+    return 0
+
+
+def cmd_search(args: argparse.Namespace) -> int:
+    """Candidate headwords for a prefix (spec §10)."""
+    from .search import search, search_all
+    from .index import Index
+    from .registry import configured_name, default_id, discovered
+
+    limit = getattr(args, "limit", 40)
+    if args.all:
+        return _out(
+            {"query": args.prefix, "results": search_all(args.prefix, discovered(), limit)},
+            args.json,
+        )
+    dict_id = args.dictionary or default_id()
+    try:
+        hits = search(dict_id, args.prefix, limit)
+    except Exception as exc:  # noqa: BLE001
+        print(f"omi-dict: {exc}", file=sys.stderr)
+        return 1
+    name = configured_name(dict_id) or (Index(dict_id).meta("name")
+                                        if Index(dict_id).exists() else dict_id)
+    if args.json:
+        return _out({"query": args.prefix, "dictionary": {"id": dict_id, "name": name},
+                     "headwords": hits}, True)
+    if not hits:
+        print(f"(no headwords start with {args.prefix!r} in {name})")
+        return 0
+    for w in hits:
+        print(f"  {w}")
+    return 0
 
 
 def main(argv: list[str] | None = None) -> int:

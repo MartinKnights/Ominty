@@ -56,15 +56,15 @@ logic; no lookup logic knows about DMS.
 | DMS mechanism | DMS plugin overlay (keybinds-sheet pattern); ADR in Phase 7 |
 | Service model | **on-demand process, no daemon** (locked, spec §32) |
 
-## Phases (spec §27)
+## Phases (spec §27) — v1 complete
 
-1. dictionary PoC — ✅ **done** (`omi-dict import` + `lookup`; ADR-001)
-2. registry — ✅ **done** (discovery, id/name, default, change detection)
-3. search — ⏳ next
-4. JSON API — ✅ basic (spec §9 shape, incl. `--all`)
-5. selection — ⏳
-6. Niri shortcut + action — ⏳
-7. DMS popup — ⏳
-8. multi-dict UI — ⏳
-9. interactive search — ⏳
-10. hardening — ⏳
+1. dictionary PoC — ✅ (`omi-dict import` + `lookup`; ADR-001)
+2. registry — ✅ (discovery, id/name, default, change detection)
+3. search — ✅ prefix, case-insensitive, bounded
+4. JSON API — ✅ spec §9 shape (+ `--all`)
+5. selection — ✅ `omi-selection` (PRIMARY → copy/restore fallback)
+6. Niri shortcut + action — ✅ `text.define` @ `Ctrl+Shift+A`
+7. DMS popup — ✅ `omintyDictionary` overlay
+8. multi-dict UI — ✅ selector + All Dictionaries
+9. interactive search — ✅ live candidates, ↑/↓, Enter
+10. hardening — ✅ unicode/malformed/empty/no-entry tests + friendly errors
