@@ -156,6 +156,17 @@ Check for collisions before adding: a chord already used by DMS will win.
 `Super+S` moved off Cinnamon's `<Shift><Super>p`, which clashed with DMS's
 `Mod+Shift+P` (power-off-monitors).
 
+**Managing keybindings after the move.** Two editors own the bindings: **DMS
+Settings → Keybinds** writes `~/.config/niri/dms/binds.kdl`, and **NiriMod**
+edits any file in the niri config tree (`config.kdl` plus its `include`d
+fragments). The cheat sheet (`Super+Shift+S` → `ominty keybinds`) walks the
+**same include-resolved tree** NiriMod edits, so a binding changed in either
+editor shows up the moment the sheet re-opens — and rows the user has changed
+from the shipped defaults are flagged with a **Custom** toggle. Physical
+function-row naming is user-defined via `ominty function-keys setup`
+(`~/.config/ominty/function-keys.toml`, 24 entries: F1–F12 with and without
+Fn).
+
 ---
 
 ## 5. Clipboard, screenshots and PRIMARY selection
