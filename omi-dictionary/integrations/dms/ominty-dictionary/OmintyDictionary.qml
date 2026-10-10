@@ -236,53 +236,32 @@ PluginComponent {
                     anchors.margins: Theme.spacingL
                     spacing: Theme.spacingM
 
-                    // Header
                     RowLayout {
                         Layout.fillWidth: true
-                        Layout.preferredHeight: 40
                         spacing: Theme.spacingM
-
                         StyledText {
                             text: "Dictionary"
                             font.pixelSize: Theme.fontSizeLarge
                             font.weight: Font.Bold
                             color: Theme.surfaceText
-                            Layout.alignment: Qt.AlignVCenter
                         }
-                        StyledText {
-                            text: "local · offline"
-                            color: Theme.surfaceVariantText
-                            Layout.alignment: Qt.AlignVCenter
-                        }
-                        Item { Layout.fillWidth: true; Layout.fillHeight: true }
+                        StyledText { text: "local · offline"; color: Theme.surfaceVariantText }
+                        Item { Layout.fillWidth: true }
                         Rectangle {
                             width: 30; height: 30; radius: 15; color: "#45475a"
-                            Layout.alignment: Qt.AlignVCenter
                             Text { anchors.centerIn: parent; text: "\u00D7"; color: "#cdd6f4"; font.pixelSize: 14 }
-                            MouseArea {
-                                anchors.fill: parent
-                                onClicked: overlay.visible = false
-                            }
+                            MouseArea { anchors.fill: parent; onClicked: overlay.visible = false }
                         }
                     }
 
-                    // Divider under the header (keeps the search field clear).
-                    Rectangle {
-                        Layout.fillWidth: true
-                        Layout.preferredHeight: 1
-                        color: Theme.outline
-                    }
-
-                    // Search + dictionary selector
                     RowLayout {
                         Layout.fillWidth: true
-                        Layout.preferredHeight: 42
                         spacing: Theme.spacingM
 
                         TextField {
                             id: searchField
                             Layout.fillWidth: true
-                            Layout.preferredHeight: 42
+                            Layout.preferredHeight: 38
                             placeholderText: "Define…  (↑/↓ candidates · Enter lookup)"
                             color: "white"
                             placeholderTextColor: Theme.surfaceVariantText
@@ -313,7 +292,7 @@ PluginComponent {
 
                         Rectangle {
                             Layout.preferredWidth: 230
-                            Layout.preferredHeight: 42
+                            Layout.preferredHeight: 38
                             radius: 6
                             border.width: 1
                             border.color: Theme.outline
@@ -398,16 +377,16 @@ PluginComponent {
                             contentWidth: width
                             contentHeight: resultText.height
 
-                              Text {
-                                  id: resultText
-                                  width: resultFlick.width
-                                  textFormat: Text.RichText
-                                  wrapMode: Text.WordWrap
-                                  text: root._displayHtml
-                                  color: Theme.surfaceText
-                                  font.pixelSize: Theme.fontSizeMedium
-                                  lineHeight: 1.15
-                              }
+                            Text {
+                                id: resultText
+                                width: resultFlick.width
+                                textFormat: Text.RichText
+                                wrapMode: Text.WordWrap
+                                text: root._displayHtml
+                                color: Theme.surfaceText
+                                font.pixelSize: Theme.fontSizeMedium
+                                lineHeight: 1.15
+                            }
                         }
                     }
 
