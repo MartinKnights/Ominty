@@ -14,6 +14,12 @@ import qs.Modules.Plugins
 // Holds NO lookup logic: it shells out to `omi-dict` (the contract) and
 // renders the JSON.  Keyboard-first: Ctrl+L search, ↑/↓ candidates, Enter
 // lookup, Ctrl+[ / Ctrl+] cycle dictionaries, Esc close.
+//
+// TWO layer surfaces on purpose:
+//   - dimWindow   (ominty:dictionary-dim)  fullscreen dim backdrop + click
+//                 outside to dismiss.  NOT matched by the blur layer-rule.
+//   - overlay     (ominty:dictionary)      the panel, centered via 4-anchor
+//                 margins so the composer blurs ONLY the panel footprint.
 
 PluginComponent {
     id: root
@@ -44,6 +50,20 @@ PluginComponent {
         return root._selector.length ? root._selector[root._dictIndex].name : "…";
     }
 
+    // Show/hide both surfaces together.
+    function _setVisible(v: bool) {
+        dimWindow.visible = v;
+        overlay.visible = v;
+    }
+    function _open() {
+        root._setVisible(true);
+        root._loadDicts();
+        searchField.forceActiveFocus();
+    }
+    function _close() {
+        root._setVisible(false);
+    }
+
     // Rich-text body for the current result (structure: paragraphs, senses,
     // emphasis — colours stripped so it follows the active theme).
     readonly property string _displayHtml: {
@@ -63,30 +83,23 @@ PluginComponent {
         target: "omintyDictionary"
 
         function open(): string {
-            overlay.visible = true;
-            root._loadDicts();
-            searchField.forceActiveFocus();
+            root._open();
             return "opened";
         }
         function openWith(word: string): string {
-            overlay.visible = true;
-            root._loadDicts();
+            root._open();
             root._query = word.trim();
             searchField.text = root._query;
-            searchField.forceActiveFocus();
             root._lookup(root._query);
             return "opened";
         }
         function toggle(): string {
-            overlay.visible = !overlay.visible;
-            if (overlay.visible) {
-                root._loadDicts();
-                searchField.forceActiveFocus();
-            }
-            return overlay.visible ? "opened" : "closed";
+            if (overlay.visible) { root._close(); return "closed"; }
+            root._open();
+            return "opened";
         }
         function close(): string {
-            overlay.visible = false;
+            root._close();
             return "closed";
         }
     }
@@ -182,7 +195,29 @@ PluginComponent {
         onTriggered: root._search(searchField.text)
     }
 
-    // ---- Overlay --------------------------------------------------------
+    // ---- Surface 1: fullscreen dim + click-outside ----------------------
+    PanelWindow {
+        id: dimWindow
+        visible: false
+        color: "transparent"
+
+        WlrLayershell.namespace: "ominty:dictionary-dim"
+        WlrLayershell.layer: WlrLayershell.Overlay
+        WlrLayershell.exclusiveZone: -1
+
+        anchors { top: true; bottom: true; left: true; right: true }
+
+        Rectangle {
+            anchors.fill: parent
+            color: Qt.rgba(0, 0, 0, 0.55)
+            MouseArea {
+                anchors.fill: parent
+                onClicked: root._close()
+            }
+        }
+    }
+
+    // ---- Surface 2: the blurred panel (centered by 4-anchor margins) ----
     PanelWindow {
         id: overlay
         visible: false
@@ -193,11 +228,20 @@ PluginComponent {
         WlrLayershell.exclusiveZone: -1
         WlrLayershell.keyboardFocus: WlrKeyboardFocus.Exclusive
 
+        // Panel is the screen minus symmetric margins → centered, so the
+        // composer's blur (layer-rule ominty:dictionary) covers the panel
+        // and nothing else.
+        readonly property int pw: Math.min(940, (overlay.screen ? overlay.screen.width : 1920) - 80)
+        readonly property int ph: Math.min(700, (overlay.screen ? overlay.screen.height : 1080) - 80)
+        readonly property int mh: Math.max(0, Math.round(((overlay.screen ? overlay.screen.width : 1920) - pw) / 2))
+        readonly property int mv: Math.max(0, Math.round(((overlay.screen ? overlay.screen.height : 1080) - ph) / 2))
+
         anchors { top: true; bottom: true; left: true; right: true }
+        margins { left: overlay.mh; right: overlay.mh; top: overlay.mv; bottom: overlay.mv }
 
         Keys.onPressed: event => {
             if (event.key === Qt.Key_Escape) {
-                overlay.visible = false; event.accepted = true;
+                root._close(); event.accepted = true;
             } else if (event.key === Qt.Key_L && (event.modifiers & Qt.ControlModifier)) {
                 searchField.forceActiveFocus(); event.accepted = true;
             } else if (event.key === Qt.Key_BracketLeft && (event.modifiers & Qt.ControlModifier)) {
@@ -211,211 +255,197 @@ PluginComponent {
             }
         }
 
-        FocusScope {
-            id: content
+        Rectangle {
             anchors.fill: parent
-            focus: true
+            radius: 12
+            color: Theme.withAlpha(Theme.surface, 0.8)
 
-            Rectangle {
+            ColumnLayout {
                 anchors.fill: parent
-                color: Qt.rgba(0, 0, 0, 0.55)
-                MouseArea { anchors.fill: parent; onClicked: overlay.visible = false }
-            }
+                anchors.margins: Theme.spacingL
+                spacing: Theme.spacingM
 
-            Rectangle {
-                id: panel
-                anchors.centerIn: parent
-                width: Math.min(920, content.width - 80)
-                height: Math.min(680, content.height - 80)
-                radius: 12
-                color: Theme.withAlpha(Theme.surface, 0.8)
-                MouseArea { anchors.fill: parent }
+                // Header
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: Theme.spacingM
+                    StyledText {
+                        text: "Dictionary"
+                        font.pixelSize: Theme.fontSizeLarge
+                        font.weight: Font.Bold
+                        color: Theme.surfaceText
+                    }
+                    StyledText { text: "local · offline"; color: Theme.surfaceVariantText }
+                    Item { Layout.fillWidth: true }
+                    Rectangle {
+                        width: 30; height: 30; radius: 15; color: "#45475a"
+                        Text { anchors.centerIn: parent; text: "\u00D7"; color: "#cdd6f4"; font.pixelSize: 14 }
+                        MouseArea { anchors.fill: parent; onClicked: root._close() }
+                    }
+                }
 
-                ColumnLayout {
-                    anchors.fill: parent
-                    anchors.margins: Theme.spacingL
+                // Search + dictionary selector
+                RowLayout {
+                    Layout.fillWidth: true
                     spacing: Theme.spacingM
 
-                    RowLayout {
+                    Rectangle {
+                        id: searchBox
                         Layout.fillWidth: true
-                        spacing: Theme.spacingM
+                        Layout.preferredHeight: 38
+                        radius: 6
+                        color: "transparent"
+                        border.width: 1
+                        border.color: Theme.outline
+                        clip: false
+
+                        TextInput {
+                            id: searchField
+                            anchors.fill: parent
+                            anchors.leftMargin: Theme.spacingM
+                            anchors.rightMargin: Theme.spacingM
+                            verticalAlignment: TextInput.AlignVCenter
+                            color: "white"
+                            text: root._query
+                            clip: false
+                            onTextChanged: { root._query = searchField.text; debounce.restart(); }
+                            Keys.onPressed: event => {
+                                if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
+                                    const w = (root._candidateIndex >= 0 && root._candidateIndex < root._candidates.length)
+                                        ? root._candidates[root._candidateIndex] : searchField.text;
+                                    root._candidates = [];
+                                    root._lookup(w);
+                                    event.accepted = true;
+                                } else if (event.key === Qt.Key_Down && root._candidates.length) {
+                                    root._candidateIndex = (root._candidateIndex + 1) % root._candidates.length;
+                                    event.accepted = true;
+                                } else if (event.key === Qt.Key_Up && root._candidates.length) {
+                                    root._candidateIndex = (root._candidateIndex - 1 + root._candidates.length) % root._candidates.length;
+                                    event.accepted = true;
+                                }
+                            }
+                        }
+
                         StyledText {
-                            text: "Dictionary"
-                            font.pixelSize: Theme.fontSizeLarge
-                            font.weight: Font.Bold
+                            visible: searchField.text === ""
+                            anchors.left: parent.left
+                            anchors.leftMargin: Theme.spacingM
+                            anchors.verticalCenter: parent.verticalCenter
+                            text: "Define…  (↑/↓ candidates · Enter lookup)"
+                            color: Theme.surfaceVariantText
+                        }
+
+                        MouseArea {
+                            anchors.fill: parent
+                            onClicked: searchField.forceActiveFocus()
+                        }
+                    }
+
+                    Rectangle {
+                        Layout.preferredWidth: 230
+                        Layout.preferredHeight: 38
+                        radius: 6
+                        border.width: 1
+                        border.color: Theme.outline
+                        color: "transparent"
+                        StyledText {
+                            anchors.left: parent.left
+                            anchors.leftMargin: Theme.spacingM
+                            anchors.verticalCenter: parent.verticalCenter
+                            width: parent.width - 40
+                            elide: Text.ElideRight
+                            text: root._dictName()
                             color: Theme.surfaceText
                         }
-                        StyledText { text: "local · offline"; color: Theme.surfaceVariantText }
-                        Item { Layout.fillWidth: true }
-                        Rectangle {
-                            width: 30; height: 30; radius: 15; color: "#45475a"
-                            Text { anchors.centerIn: parent; text: "\u00D7"; color: "#cdd6f4"; font.pixelSize: 14 }
-                            MouseArea { anchors.fill: parent; onClicked: overlay.visible = false }
-                        }
-                    }
-
-                    RowLayout {
-                        Layout.fillWidth: true
-                        spacing: Theme.spacingM
-
-                        Rectangle {
-                            id: searchBox
-                            Layout.fillWidth: true
-                            Layout.preferredHeight: 38
-                            radius: 6
-                            color: "transparent"
-                            border.width: 1
-                            border.color: Theme.outline
-                            clip: false
-
-                            TextInput {
-                                id: searchField
-                                anchors.fill: parent
-                                anchors.leftMargin: Theme.spacingM
-                                anchors.rightMargin: Theme.spacingM
-                                verticalAlignment: TextInput.AlignVCenter
-                                color: "white"
-                                text: root._query
-                                clip: false
-                                onTextChanged: { root._query = searchField.text; debounce.restart(); }
-                                Keys.onPressed: event => {
-                                    if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
-                                        const w = (root._candidateIndex >= 0 && root._candidateIndex < root._candidates.length)
-                                            ? root._candidates[root._candidateIndex] : searchField.text;
-                                        root._candidates = [];
-                                        root._lookup(w);
-                                        event.accepted = true;
-                                    } else if (event.key === Qt.Key_Down && root._candidates.length) {
-                                        root._candidateIndex = (root._candidateIndex + 1) % root._candidates.length;
-                                        event.accepted = true;
-                                    } else if (event.key === Qt.Key_Up && root._candidates.length) {
-                                        root._candidateIndex = (root._candidateIndex - 1 + root._candidates.length) % root._candidates.length;
-                                        event.accepted = true;
-                                    }
-                                }
-                            }
-
-                            StyledText {
-                                visible: searchField.text === ""
-                                anchors.left: parent.left
-                                anchors.leftMargin: Theme.spacingM
-                                anchors.verticalCenter: parent.verticalCenter
-                                text: "Define…  (↑/↓ candidates · Enter lookup)"
-                                color: Theme.surfaceVariantText
-                            }
-
-                            MouseArea {
-                                anchors.fill: parent
-                                onClicked: searchField.forceActiveFocus()
-                            }
-                        }
-
-                        Rectangle {
-                            Layout.preferredWidth: 230
-                            Layout.preferredHeight: 38
-                            radius: 6
-                            border.width: 1
-                            border.color: Theme.outline
-                            color: "transparent"
-                            StyledText {
-                                anchors.left: parent.left
-                                anchors.leftMargin: Theme.spacingM
-                                anchors.verticalCenter: parent.verticalCenter
-                                width: parent.width - 40
-                                elide: Text.ElideRight
-                                text: root._dictName()
-                                color: Theme.surfaceText
-                            }
-                            StyledText {
-                                anchors.right: parent.right
-                                anchors.rightMargin: Theme.spacingS
-                                anchors.verticalCenter: parent.verticalCenter
-                                text: "\u25BE"
-                                color: Theme.surfaceVariantText
-                            }
-                            MouseArea {
-                                anchors.fill: parent
-                                onClicked: {
-                                    root._dictIndex = (root._dictIndex + 1) % root._selector.length;
-                                    if (root._query) root._lookup(root._query);
-                                }
-                            }
-                        }
-                    }
-
-                    // Candidate list (interactive search)
-                    ListView {
-                        Layout.fillWidth: true
-                        Layout.preferredHeight: Math.min(170, root._candidates.length * 30)
-                        visible: root._candidates.length > 0 && !root._loading
-                        clip: true
-                        spacing: 2
-                        model: root._candidates
-                        delegate: Rectangle {
-                            required property int index
-                            required property string modelData
-                            width: ListView.view.width
-                            height: 30
-                            radius: 4
-                            color: index === root._candidateIndex ? Theme.primary : "transparent"
-                            StyledText {
-                                anchors.left: parent.left
-                                anchors.leftMargin: Theme.spacingS
-                                anchors.verticalCenter: parent.verticalCenter
-                                text: modelData
-                                color: index === root._candidateIndex ? "black" : Theme.surfaceText
-                            }
-                            MouseArea {
-                                anchors.fill: parent
-                                onClicked: { root._candidates = []; root._lookup(modelData); }
-                            }
-                        }
-                    }
-
-                    // Result
-                    Item {
-                        Layout.fillWidth: true
-                        Layout.fillHeight: true
-
                         StyledText {
-                            anchors.centerIn: parent
-                            visible: root._loading || root._error !== "" || root._displayHtml === ""
-                            width: parent.width - 20
-                            wrapMode: Text.WordWrap
-                            horizontalAlignment: Text.AlignHCenter
-                            text: root._loading ? "Looking up…"
-                                : (root._error !== "" ? root._error
-                                    : "Select a word and press Ctrl+Shift+A, or type to search.")
-                            color: root._error !== "" ? "#f38ba8" : Theme.surfaceVariantText
+                            anchors.right: parent.right
+                            anchors.rightMargin: Theme.spacingS
+                            anchors.verticalCenter: parent.verticalCenter
+                            text: "\u25BE"
+                            color: Theme.surfaceVariantText
                         }
-
-                        Flickable {
-                            id: resultFlick
+                        MouseArea {
                             anchors.fill: parent
-                            visible: root._displayHtml !== "" && root._error === "" && !root._loading
-                            clip: true
-                            contentWidth: width
-                            contentHeight: resultText.height
-
-                            Text {
-                                id: resultText
-                                width: resultFlick.width
-                                textFormat: Text.RichText
-                                wrapMode: Text.WordWrap
-                                text: root._displayHtml
-                                color: Theme.surfaceText
-                                font.pixelSize: Theme.fontSizeMedium
-                                lineHeight: 1.15
+                            onClicked: {
+                                root._dictIndex = (root._dictIndex + 1) % root._selector.length;
+                                if (root._query) root._lookup(root._query);
                             }
                         }
                     }
+                }
+
+                // Candidate list (interactive search)
+                ListView {
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: Math.min(170, root._candidates.length * 30)
+                    visible: root._candidates.length > 0 && !root._loading
+                    clip: true
+                    spacing: 2
+                    model: root._candidates
+                    delegate: Rectangle {
+                        required property int index
+                        required property string modelData
+                        width: ListView.view.width
+                        height: 30
+                        radius: 4
+                        color: index === root._candidateIndex ? Theme.primary : "transparent"
+                        StyledText {
+                            anchors.left: parent.left
+                            anchors.leftMargin: Theme.spacingS
+                            anchors.verticalCenter: parent.verticalCenter
+                            text: modelData
+                            color: index === root._candidateIndex ? "black" : Theme.surfaceText
+                        }
+                        MouseArea {
+                            anchors.fill: parent
+                            onClicked: { root._candidates = []; root._lookup(modelData); }
+                        }
+                    }
+                }
+
+                // Result
+                Item {
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
 
                     StyledText {
-                        Layout.fillWidth: true
-                        text: "Ctrl+L search field · ↑/↓ candidates · Enter lookup · Ctrl+[ ] dictionaries · Esc close"
-                        color: Theme.surfaceVariantText
-                        font.pixelSize: 11
+                        anchors.centerIn: parent
+                        visible: root._loading || root._error !== "" || root._displayHtml === ""
+                        width: parent.width - 20
+                        wrapMode: Text.WordWrap
+                        horizontalAlignment: Text.AlignHCenter
+                        text: root._loading ? "Looking up…"
+                            : (root._error !== "" ? root._error
+                                : "Select a word and press Ctrl+Shift+A, or type to search.")
+                        color: root._error !== "" ? "#f38ba8" : Theme.surfaceVariantText
                     }
+
+                    Flickable {
+                        id: resultFlick
+                        anchors.fill: parent
+                        visible: root._displayHtml !== "" && root._error === "" && !root._loading
+                        clip: true
+                        contentWidth: width
+                        contentHeight: resultText.height
+
+                        Text {
+                            id: resultText
+                            width: resultFlick.width
+                            textFormat: Text.RichText
+                            wrapMode: Text.WordWrap
+                            text: root._displayHtml
+                            color: Theme.surfaceText
+                            font.pixelSize: Theme.fontSizeMedium
+                            lineHeight: 1.15
+                        }
+                    }
+                }
+
+                StyledText {
+                    Layout.fillWidth: true
+                    text: "Ctrl+L search field · ↑/↓ candidates · Enter lookup · Ctrl+[ ] dictionaries · Esc close"
+                    color: Theme.surfaceVariantText
+                    font.pixelSize: 11
                 }
             }
         }

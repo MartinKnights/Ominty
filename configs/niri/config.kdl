@@ -128,10 +128,10 @@ layer-rule {
       place-within-backdrop true
   }
 
-  // Ominty overlays (dictionary, keybinds, voice, tts) blur whatever is
-  // beneath them so translucent popup backgrounds stay readable.
+  // Ominty dictionary popup: blur only the panel (the fullscreen dim
+  // backdrop is a separate -dim surface that stays unblurred).
   layer-rule {
-      match namespace="^ominty:"
+      match namespace="^ominty:dictionary$"
       background-effect {
           blur true
       }
