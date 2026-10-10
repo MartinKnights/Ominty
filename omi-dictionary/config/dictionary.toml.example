@@ -1,0 +1,26 @@
+# omi — dictionary configuration (spec §6). Optional: a dictionary without
+# an entry here gets a name derived from its file name.
+#
+#   general.default_dictionary   id used by `omi-dict lookup WORD` (§7)
+#   dictionaries.<id>.name       display name shown in the popup selector
+#   dictionaries.<id>.priority   sort order (lower = higher); the default
+#                                dictionary is expanded first in All mode (§11)
+
+[general]
+default_dictionary = "oed"
+
+[dictionaries.oed]
+name = "Oxford English Dictionary (2nd Edition)"
+priority = 10
+
+[dictionaries.roget]
+name = "Roget's Thesaurus"
+priority = 20
+
+[dictionaries.etymology]
+name = "Online Etymology Dictionary"
+priority = 30
+
+[dictionaries.britannica]
+name = "Britannica Concise Encyclopedia"
+priority = 40

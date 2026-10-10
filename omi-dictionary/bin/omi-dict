@@ -1,0 +1,19 @@
+#!/usr/bin/env python3
+"""omi-dict — Omi dictionary service CLI.
+
+The stable command-line contract between the dictionary engine and every
+other Omi component (DMS popup, Pi, scripts).  Usable with no desktop
+session at all.
+"""
+
+from __future__ import annotations
+
+import os
+import sys
+
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "src"))
+
+from omi_dict.cli import main
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))
