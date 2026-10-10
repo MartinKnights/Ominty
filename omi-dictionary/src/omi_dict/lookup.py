@@ -11,7 +11,7 @@ import zlib
 
 from . import config as cfg
 from .errors import DictionaryNeedsRebuild, NoEntryFound
-from .index import Index, casefold_key, strip_html
+from .index import Index, casefold_key, strip_html, to_display_html
 from .registry import configured_name
 
 
@@ -51,6 +51,7 @@ def lookup(dict_id: str, word: str) -> dict:
     return {
         "headword": term,
         "html": html,
+        "display": to_display_html(html),
         "text": strip_html(html),
         **structured,
     }
@@ -70,6 +71,7 @@ def result_shape(query: str, dict_id: str, name: str, entry: dict) -> dict:
             "examples": entry["examples"],
             "html": entry["html"],
             "text": entry.get("text", ""),
+            "display": entry.get("display", ""),
         },
     }
 

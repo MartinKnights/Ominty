@@ -218,3 +218,17 @@ def test_error_codes_are_stable():
     assert NoEntryFound().code == "NO_ENTRY_FOUND"
     assert SelectionUnavailable().code == "UNABLE_TO_OBTAIN_SELECTED_TEXT"
     assert DictionaryUnavailable().code == "DICTIONARY_UNAVAILABLE"
+
+
+def test_display_html_structure():
+    from omi_dict.index import clean_body, strip_html, to_display_html
+
+    raw = ("<DIV id=init_OED2><style>x</style></DIV>"
+           "<b>\u25aa I.</b><BR>word <i>rare</i>.<BR>a line")
+    cleaned = clean_body(raw)
+    assert "\n" in cleaned                       # <BR> became a newline
+    disp = to_display_html(cleaned)
+    assert "<br>" in disp and "<b>" in disp and "<i>" in disp
+    assert "init_OED2" not in disp and "style" not in disp
+    text = strip_html(cleaned)
+    assert "rare" in text and "\n" in text

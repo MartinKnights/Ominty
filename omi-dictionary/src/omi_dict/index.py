@@ -33,22 +33,51 @@ def casefold_key(term: str) -> str:
 
 
 def clean_body(raw: str) -> str:
-    """Strip the per-entry boilerplate (fonts/CSS/scripts/assets) and tidy."""
+    """Strip the per-entry boilerplate and normalise line structure.
+
+    ``<BR>`` tags and BGL ``\\t`` segment markers become real newlines so the
+    entry keeps its paragraph/sense structure; only runs of spaces are
+    collapsed (newlines are preserved for rich rendering).
+    """
     body = BOILERPLATE_RE.sub(" ", raw)
     body = body.replace("file://d:/b/lmpn.ttf", "")
-    return SPACES_RE.sub(" ", body).strip().strip("\\t").strip()
+    body = re.sub(r"(?i)<br\s*/?>", "\n", body)
+    body = body.replace("\\t", "\n").replace("\t", "\n")
+    body = re.sub(r"[ \f\v]{2,}", " ", body)
+    body = re.sub(r"\n{3,}", "\n\n", body)
+    return body.strip()
 
 
 def strip_html(body: str) -> str:
-    """Minimal HTML → plain text for quick previews (not a full renderer)."""
+    """Minimal HTML → readable plain text (paragraphs and sense lines kept)."""
     text = re.sub(r'<a [^>]*bword://([^">]+)[^>]*>', r"\1", body)
-    text = re.sub(r"<[^>]+>", " ", text)
-    text = text.replace("&lt;", "<").replace("&gt;", ">").replace(
-        "&amp;", "&"
-    ).replace("&nbsp;", " ").replace("&quot;", '"').replace("&#39;", "'")
-    # BGL segment separators read as line breaks.
-    text = text.replace("\\t", "\n    ").replace("\t", "\n    ")
-    return SPACES_RE.sub(" ", text).strip()
+    text = re.sub(r"<[^>]+>", "", text)
+    text = (text.replace("&lt;", "<").replace("&gt;", ">").replace("&amp;", "&")
+            .replace("&nbsp;", " ").replace("&quot;", '"').replace("&#39;", "'"))
+    lines: list[str] = []
+    for line in text.split("\n"):
+        line = re.sub(r"[ \t]{2,}", " ", line).strip()
+        if line:
+            lines.append("  " + line)
+        elif lines and lines[-1] != "":
+            lines.append("")
+    return "\n".join(lines).strip()
+
+
+# Tags the DMS popup can render (Qt rich text subset).  Everything else is
+# unwrapped/dropped and colours removed so the entry follows the active theme.
+_DISPLAY_KEEP = re.compile(r"</?(?:b|i|u|em|strong|br)\b[^>]*>", re.IGNORECASE)
+_DISPLAY_TAG = re.compile(r"<[^>]+>")
+
+
+def to_display_html(body: str) -> str:
+    """Sanitised, theme-friendly rich text for the popup (structure only)."""
+    h = re.sub(r"</?(?:span|font|a|div|nobr|p)\b[^>]*>", "", body, flags=re.IGNORECASE)
+    h = _DISPLAY_TAG.sub(lambda m: m.group(0) if _DISPLAY_KEEP.fullmatch(m.group(0)) else "", h)
+    h = (h.replace("&lt;", "<").replace("&gt;", ">").replace("&amp;", "&")
+         .replace("&nbsp;", " ").replace("&quot;", '"').replace("&#39;", "'"))
+    h = re.sub(r"[ \t]{2,}", " ", h)
+    return "<br>".join(part.strip() for part in h.split("\n") if part.strip())
 
 
 def find_pyglossary() -> str | None:

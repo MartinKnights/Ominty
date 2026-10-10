@@ -44,16 +44,18 @@ PluginComponent {
         return root._selector.length ? root._selector[root._dictIndex].name : "…";
     }
 
-    // Plain-text body for the current result (single entry or All mode).
-    readonly property string _displayText: {
+    // Rich-text body for the current result (structure: paragraphs, senses,
+    // emphasis — colours stripped so it follows the active theme).
+    readonly property string _displayHtml: {
         if (!root._result) return "";
         if (root._result.results) {
             return root._result.results.map(function (r, i) {
                 const marker = i === 0 ? "\u25BC " : "\u25B6 ";
-                return marker + r.dictionary.name + "\n" + (r.entry.text || "");
-            }).join("\n\n");
+                return "<b>" + marker + r.dictionary.name + "</b><br>"
+                    + (r.entry.display || r.entry.text || "");
+            }).join("<br><br>");
         }
-        return root._result.entry ? (root._result.entry.text || "") : "";
+        return root._result.entry ? (root._result.entry.display || root._result.entry.text || "") : "";
     }
 
     // ---- IPC ------------------------------------------------------------
@@ -234,32 +236,53 @@ PluginComponent {
                     anchors.margins: Theme.spacingL
                     spacing: Theme.spacingM
 
+                    // Header
                     RowLayout {
                         Layout.fillWidth: true
+                        Layout.preferredHeight: 40
                         spacing: Theme.spacingM
+
                         StyledText {
                             text: "Dictionary"
                             font.pixelSize: Theme.fontSizeLarge
                             font.weight: Font.Bold
                             color: Theme.surfaceText
+                            Layout.alignment: Qt.AlignVCenter
                         }
-                        StyledText { text: "local · offline"; color: Theme.surfaceVariantText }
-                        Item { Layout.fillWidth: true }
+                        StyledText {
+                            text: "local · offline"
+                            color: Theme.surfaceVariantText
+                            Layout.alignment: Qt.AlignVCenter
+                        }
+                        Item { Layout.fillWidth: true; Layout.fillHeight: true }
                         Rectangle {
                             width: 30; height: 30; radius: 15; color: "#45475a"
+                            Layout.alignment: Qt.AlignVCenter
                             Text { anchors.centerIn: parent; text: "\u00D7"; color: "#cdd6f4"; font.pixelSize: 14 }
-                            MouseArea { anchors.fill: parent; onClicked: overlay.visible = false }
+                            MouseArea {
+                                anchors.fill: parent
+                                onClicked: overlay.visible = false
+                            }
                         }
                     }
 
+                    // Divider under the header (keeps the search field clear).
+                    Rectangle {
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: 1
+                        color: Theme.outline
+                    }
+
+                    // Search + dictionary selector
                     RowLayout {
                         Layout.fillWidth: true
+                        Layout.preferredHeight: 42
                         spacing: Theme.spacingM
 
                         TextField {
                             id: searchField
                             Layout.fillWidth: true
-                            Layout.preferredHeight: 38
+                            Layout.preferredHeight: 42
                             placeholderText: "Define…  (↑/↓ candidates · Enter lookup)"
                             color: "white"
                             placeholderTextColor: Theme.surfaceVariantText
@@ -290,7 +313,7 @@ PluginComponent {
 
                         Rectangle {
                             Layout.preferredWidth: 230
-                            Layout.preferredHeight: 38
+                            Layout.preferredHeight: 42
                             radius: 6
                             border.width: 1
                             border.color: Theme.outline
@@ -357,7 +380,7 @@ PluginComponent {
 
                         StyledText {
                             anchors.centerIn: parent
-                            visible: root._loading || root._error !== "" || root._displayText === ""
+                            visible: root._loading || root._error !== "" || root._displayHtml === ""
                             width: parent.width - 20
                             wrapMode: Text.WordWrap
                             horizontalAlignment: Text.AlignHCenter
@@ -370,18 +393,21 @@ PluginComponent {
                         Flickable {
                             id: resultFlick
                             anchors.fill: parent
-                            visible: root._displayText !== "" && root._error === "" && !root._loading
+                            visible: root._displayHtml !== "" && root._error === "" && !root._loading
                             clip: true
                             contentWidth: width
                             contentHeight: resultText.height
 
-                            StyledText {
-                                id: resultText
-                                width: resultFlick.width
-                                wrapMode: Text.WordWrap
-                                text: root._displayText
-                                color: Theme.surfaceText
-                            }
+                              Text {
+                                  id: resultText
+                                  width: resultFlick.width
+                                  textFormat: Text.RichText
+                                  wrapMode: Text.WordWrap
+                                  text: root._displayHtml
+                                  color: Theme.surfaceText
+                                  font.pixelSize: Theme.fontSizeMedium
+                                  lineHeight: 1.15
+                              }
                         }
                     }
 
