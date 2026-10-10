@@ -124,10 +124,19 @@ layout {
     }
 }
 layer-rule {
-    match namespace="^quickshell$"
-    place-within-backdrop true
-}
-overview {
+      match namespace="^quickshell$"
+      place-within-backdrop true
+  }
+
+  // Ominty overlays (dictionary, keybinds, voice, tts) blur whatever is
+  // beneath them so translucent popup backgrounds stay readable.
+  layer-rule {
+      match namespace="^ominty:"
+      background-effect {
+          blur true
+      }
+  }
+  overview {
     workspace-shadow {
         off
     }
