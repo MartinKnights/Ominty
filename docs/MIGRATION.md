@@ -155,13 +155,15 @@ Ominty-generated fragments — those are regenerated and would drop them.
 Check for collisions before adding: a chord already used by DMS will win.
 `Super+S` moved off Cinnamon's `<Shift><Super>p`, which clashed with DMS's
 `Mod+Shift+P` (power-off-monitors).
-**Why a wrapper for Artha:** Artha reads the **X11 PRIMARY** selection
-itself, which is empty under Wayland, so its search field would open blank.
-`artha-word` captures the Wayland selection (`wl-paste --primary`, with the
-clipboard as fallback — the same primitive the dictionary service uses),
-casts it into X11 PRIMARY via a short-lived `xclip` owner, then launches
-Artha.  Under Cinnamon (X11) PRIMARY already works and the wrapper does
-nothing extra.
+**Why a wrapper for Artha:** Artha is an X11 app that prefilled its query
+from **X11 PRIMARY**, which is empty under Wayland, so its search field
+opened blank.  `artha-word` captures the Wayland selection
+(`wl-paste --primary`, clipboard fallback), focuses Artha's window through
+Niri (`niri msg action focus-window --id`), pastes the word into the query
+entry via the bridged clipboard (`wl-copy` → `wtype Ctrl+V`) and presses
+Enter, then restores the previous clipboard so looks-ups never disturb it.
+Under Cinnamon (X11) PRIMARY already works and the wrapper launches Artha
+directly.
 
 
 **Managing keybindings after the move.** Two editors own the bindings: **DMS
