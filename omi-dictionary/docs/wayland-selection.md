@@ -28,3 +28,10 @@ clipboard** under Wayland, where PRIMARY is rarely populated.
 Niri does not widely populate PRIMARY; the clipboard fallback path is what
 makes most applications work.  Results are documented per application in
 Phase 5.
+### Worked example — Artha (`Ctrl+Alt+A`)
+
+Artha is an X11 app that reads PRIMARY itself; under Wayland that's empty,
+so its search field opened blank.  `~/bin/artha-word` bridges the Wayland
+selection (PRIMARY → clipboard fallback) into X11 PRIMARY with a
+short-lived `xclip` owner before launching Artha; X11 sessions launch
+Artha directly.  Same primitives as `omi-dict selection`.

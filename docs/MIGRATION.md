@@ -137,7 +137,7 @@ sessions:
 | --- | --- | --- |
 | Script Command Centre | `Super+S` | `/home/martin/Scripts/script_command_centre.sh` |
 | Read Selection | `Ctrl+Alt+S` | `/home/martin/bin/read-selection` |
-| Artha Dictionary | `Ctrl+Alt+A` | `/usr/bin/artha` |
+| Artha Dictionary | `Ctrl+Alt+A` | `/home/martin/bin/artha-word` (wrapper: bridges the selection to X11 for Artha) |
 | Screen OCR | `Ctrl+Alt+R` | `/home/martin/.local/bin/screen-ocr` |
 
 ```kdl
@@ -155,6 +155,14 @@ Ominty-generated fragments — those are regenerated and would drop them.
 Check for collisions before adding: a chord already used by DMS will win.
 `Super+S` moved off Cinnamon's `<Shift><Super>p`, which clashed with DMS's
 `Mod+Shift+P` (power-off-monitors).
+**Why a wrapper for Artha:** Artha reads the **X11 PRIMARY** selection
+itself, which is empty under Wayland, so its search field would open blank.
+`artha-word` captures the Wayland selection (`wl-paste --primary`, with the
+clipboard as fallback — the same primitive the dictionary service uses),
+casts it into X11 PRIMARY via a short-lived `xclip` owner, then launches
+Artha.  Under Cinnamon (X11) PRIMARY already works and the wrapper does
+nothing extra.
+
 
 **Managing keybindings after the move.** Two editors own the bindings: **DMS
 Settings → Keybinds** writes `~/.config/niri/dms/binds.kdl`, and **NiriMod**
