@@ -1,0 +1,19 @@
+{
+    "id": "omintyMedia",
+    "name": "Ominty Media",
+    "description": "Local media playlist launcher (omi-media) — keyboard-first, four category tabs (Audio, Courses, Music, Video), searchable.",
+    "version": "0.1.0",
+    "author": "Ominty",
+    "icon": "movie",
+    "type": "daemon",
+    "capabilities": [
+        "daemon"
+    ],
+    "components": {
+        "daemon": "./OmintyMedia.qml"
+    },
+    "requires_dms": ">=1.2.0",
+    "permissions": [
+        "process"
+    ]
+}

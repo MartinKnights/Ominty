@@ -1,0 +1,22 @@
+#!/usr/bin/env python3
+"""omi-media — Omi media launcher CLI.
+
+The stable command-line contract between playlist discovery and every
+presentation layer (DMS popup, scripts, later Pi agent).  Usable with no
+desktop session at all.
+"""
+
+from __future__ import annotations
+
+import os
+import sys
+
+# Resolve symlinks so ~/.local/bin/omi-media → repo/bin/omi-media still finds
+# ../src (plain abspath would resolve ../src against ~/.local/bin).
+_HERE = os.path.dirname(os.path.realpath(__file__))
+sys.path.insert(0, os.path.join(_HERE, "..", "src"))
+
+from omi_media.cli import main
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

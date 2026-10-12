@@ -1,11 +1,4 @@
 # Python
 __pycache__/
 *.pyc
-
-# Editor
-.vscode/
-.idea/
-
-# OS
-.DS_Store
-Thumbs.db
+.pytest_cache/

@@ -1,0 +1,33 @@
+# omi — media launcher configuration (Omi Media Launcher spec §4–§6).
+# Optional: without this file the tool uses the built-in defaults shown
+# here (root = ~/Playlist, four categories, vlc/mpv players).
+
+[general]
+# Root playlist folder. Overrides the built-in default (~/Playlist).
+root = "/home/martin/Playlist"
+
+# One section per category. `directory` may contain `{root}` to stay short.
+# `player` is any executable; `player_args` are passed before the playlist.
+
+[categories.audio]
+name = "Audio"
+directory = "{root}/Audio"
+player = "mpv"
+# mpv only opens its controller window for audio when asked explicitly.
+player_args = ["--force-window=yes"]
+
+[categories.courses]
+name = "Courses"
+directory = "{root}/Courses"
+player = "vlc"
+
+[categories.music]
+name = "Music"
+directory = "{root}/Music"
+player = "mpv"
+player_args = ["--force-window=yes"]
+
+[categories.video]
+name = "Video"
+directory = "{root}/Video"
+player = "vlc"
