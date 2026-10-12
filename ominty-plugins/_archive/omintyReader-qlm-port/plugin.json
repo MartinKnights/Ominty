@@ -1,0 +1,23 @@
+{
+  "$schema": "https://github.com/AvengeMedia/DankMaterialShell/raw/refs/heads/master/PLUGINS/plugin-schema.json",
+  "id": "omintyReader",
+  "name": "Ominty Reader",
+  "description": "Minimal ebook reader (library, reading view, remembers your place). Ported from omarchy-reader (clumzeez.reader) to Ominty/DMS. Keybinding-triggered overlay; bar widget follows (see skill).",
+  "version": "0.1.0",
+  "license": "MIT",
+  "author": "Ominty (ported from ClumZeez)",
+  "icon": "menu_book",
+  "type": "daemon",
+  "capabilities": [
+    "daemon"
+  ],
+  "components": {
+    "daemon": "./OmintyReader.qml"
+  },
+  "requires_dms": ">=1.6.0",
+  "permissions": [
+    "settings_read",
+    "settings_write",
+    "process"
+  ]
+}

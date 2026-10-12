@@ -1,0 +1,21 @@
+{
+  "$schema": "https://github.com/AvengeMedia/DankMaterialShell/raw/refs/heads/master/PLUGINS/plugin-schema.json",
+  "id": "omintyDownload",
+  "name": "Ominty Download Manager",
+  "description": "Native aria2 download manager for Ominty: add URLs, parallel queue with progress, pause/resume/remove. Built natively on DMS.",
+  "version": "0.1.0",
+  "icon": "download",
+  "type": "daemon",
+  "capabilities": [
+    "daemon"
+  ],
+  "components": {
+    "daemon": "./OmintyDownload.qml"
+  },
+  "requires_dms": ">=1.6.0",
+  "permissions": [
+    "process",
+    "settings_read",
+    "settings_write"
+  ]
+}

@@ -1,0 +1,212 @@
+diff --git a/AiOverviewControlSettings.qml b/AiOverviewControlSettings.qml
+index 5f05092..411b1e9 100644
+--- a/AiOverviewControlSettings.qml
++++ b/AiOverviewControlSettings.qml
+@@ -304,6 +304,7 @@ PluginSettings {
+         { id:"vertexai", name:"Vertex AI", icon:"settings_remote", mode:"telemetry", requirement:"gcloud CLI", envVar:"GOOGLE_CLOUD_PROJECT", note:"Official gcloud authentication status" },
+         { id:"byteplus", name:"BytePlus Ark", icon:"rocket_launch", mode:"telemetry", requirement:"API key", envVar:"BYTEPLUS_API_KEY", note:"Official models API authentication check" },
+         { id:"ollama", name:"Ollama", icon:"dns", mode:"telemetry", requirement:"local Ollama server", envVar:"OLLAMA_HOST", note:"Official local tags and running-model APIs" },
++            { id:"lmstudio", name:"LM Studio", icon:"smart_toy", mode:"local", requirement:"local LM Studio server", envVar:"LMSTUDIO_HOST", note:"Loaded models from the local OpenAI-compatible server" },
+         { id:"together", name:"Together AI", icon:"join_inner", mode:"telemetry", requirement:"API key", envVar:"TOGETHER_API_KEY", note:"Read-only API-key validation; usage and billing remain in the console" },
+         { id:"groq", name:"Groq", icon:"fast_forward", mode:"telemetry", requirement:"API key", envVar:"GROQ_API_KEY", note:"Official models API authentication check" },
+         { id:"cohere", name:"Cohere", icon:"waves", mode:"telemetry", requirement:"API key", envVar:"COHERE_API_KEY", note:"Official models API authentication check" },
+@@ -376,7 +377,8 @@ PluginSettings {
+             pi: "agent",
+             hermes: "agent,provider",
+             "9router": "gateway",
+-            ollama: "local"
++            ollama: "local",
++            lmstudio: "local"
+         };
+         return kinds[String(providerId || "").trim().toLowerCase()] || "";
+     }
+diff --git a/AiOverviewControlWidget.qml b/AiOverviewControlWidget.qml
+index ebc56cb..82dac70 100644
+--- a/AiOverviewControlWidget.qml
++++ b/AiOverviewControlWidget.qml
+@@ -184,7 +184,7 @@ PluginComponent {
+     // Hosted model providers first; the trailing group collects local and
+     // non-provider tooling (self-hosted inference, gateways/routers, agent
+     // harness analytics) so the picker keeps them visually separated.
+-    readonly property var availableProviderOptions: ["codex", "claude", "copilot", "antigravity", "gemini", "openrouter", "deepseek", "kimi", "kimi-code", "mistral", "glm", "zai", "minimax", "commandcode", "qwen", "nvidia", "cloudflare", "vertexai", "byteplus", "together", "groq", "cohere", "replicate", "fireworks", "ai21", "xai", "kilo", "perplexity", "cursor", "cline", "opencode", "kiro", "warp", "amp", "ollama", "9router", "pi", "hermes"]
++    readonly property var availableProviderOptions: ["codex", "claude", "copilot", "antigravity", "gemini", "openrouter", "deepseek", "kimi", "kimi-code", "mistral", "glm", "zai", "minimax", "commandcode", "qwen", "nvidia", "cloudflare", "vertexai", "byteplus", "together", "groq", "cohere", "replicate", "fireworks", "ai21", "xai", "kilo", "perplexity", "cursor", "cline", "opencode", "kiro", "warp", "amp", "ollama", "lmstudio", "9router", "pi", "hermes"]
+ 
+     ListModel {
+         id: claudeModelList
+@@ -670,6 +670,7 @@ PluginComponent {
+             ark: "BytePlus Ark",
+             modelark: "BytePlus Ark",
+             ollama: "Ollama",
++            lmstudio: "LM Studio",
+             together: "Together AI",
+             groq: "Groq",
+             cohere: "Cohere",
+@@ -1004,7 +1005,8 @@ PluginComponent {
+             pi: "agent",
+             hermes: "agent,provider",
+             "9router": "gateway",
+-            ollama: "local"
++            ollama: "local",
++            lmstudio: "local"
+         };
+         const value = kinds[normalizeProviderId(providerId)];
+         return value ? value.split(",") : ["provider"];
+@@ -2278,69 +2280,12 @@ PluginComponent {
+             }
+             Component.onDestruction: root.hidePillTooltip()
+ 
+-            Row {
+-                anchors.verticalCenter: parent.verticalCenter
+-                spacing: 0
+-                visible: !root.hasError || root.hasProviderData
+-
+-                Repeater {
+-                    model: root.pillDisplayProviders
+-
+-                    Row {
+-                        id: pillEntry
+-                        required property var modelData
+-                        required property int index
+-                        readonly property color usageColor: root.getUsageColor(root.pillPercentFor(modelData))
+-                        objectName: "pill-entry-" + modelData.provider
+-                        spacing: root.pillCompact ? 2 : 4
+-
+-                        StyledText {
+-                            visible: pillEntry.index > 0
+-                            // Compact drops the padding spaces; leftPadding mirrors
+-                            // the entry spacing on the right of the dot.
+-                            text: root.pillCompact ? "·" : " · "
+-                            leftPadding: root.pillCompact ? 2 : 0
+-                            color: Theme.withAlpha(Theme.surfaceText, 0.3)
+-                            font.pixelSize: Theme.fontSizeSmall
+-                            font.weight: Font.DemiBold
+-                            anchors.verticalCenter: parent.verticalCenter
+-                        }
+-
+-                        ProviderLogo {
+-                            providerId: pillEntry.modelData.provider
+-                            logoSize: 14
+-                            tintColor: root.providerLogoColor
+-                            anchors.verticalCenter: parent.verticalCenter
+-                        }
+-
+-                        StyledText {
+-                            objectName: "pill-name-" + pillEntry.modelData.provider
+-                            visible: root.pillShowNames
+-                            text: root.providerName(pillEntry.modelData.provider)
+-                            color: Theme.surfaceText
+-                            font.pixelSize: Theme.fontSizeSmall
+-                            font.weight: Font.DemiBold
+-                            anchors.verticalCenter: parent.verticalCenter
+-                        }
+-
+-                        StyledText {
+-                            text: `${Math.round(root.pillPercentFor(pillEntry.modelData))}%`
+-                            color: pillEntry.usageColor
+-                            font.pixelSize: Theme.fontSizeSmall
+-                            font.weight: Font.Bold
+-                            anchors.verticalCenter: parent.verticalCenter
+-                        }
+-                    }
+-                }
+-            }
+-
+             StyledText {
+-                visible: root.pillDisplayProviders.length === 0
+-                text: root.isLoading ? "…" : (root.hasError ? root.t("pill.error", "ERR") : root.t("pill.no_data", "N/A"))
+-                color: root.isLoading ? Theme.surfaceVariantText : (root.hasError ? Theme.error : Theme.surfaceVariantText)
+-                font.pixelSize: Theme.fontSizeSmall
+-                font.weight: Font.DemiBold
+                 anchors.verticalCenter: parent.verticalCenter
++                text: "AUC"
++                font.pixelSize: Theme.fontSizeSmall
++                font.weight: Font.Bold
++                color: root.isLoading ? Theme.surfaceVariantText : (root.hasError ? Theme.error : Theme.surfaceText)
+             }
+         }
+     }
+diff --git a/ProviderLogo.qml b/ProviderLogo.qml
+index d6591a0..f5828f1 100644
+--- a/ProviderLogo.qml
++++ b/ProviderLogo.qml
+@@ -39,7 +39,7 @@ Item {
+             "9router": "share", deepseek: "tsunami", kimi: "dark_mode", mistral: "air",
+             glm: "bubble_chart", minimax: "grid_view", qwen: "cloud", nvidia: "memory",
+             cloudflare: "shield", vertexai: "hexagon", byteplus: "bolt",
+-            perplexity: "travel_explore", cursor: "ads_click", ollama: "dns",
++            perplexity: "travel_explore", cursor: "ads_click", ollama: "dns", lmstudio: "smart_toy",
+             together: "join_inner", groq: "fast_forward", cohere: "waves",
+             replicate: "content_copy", fireworks: "local_fire_department", xai: "bolt",
+             ai21: "looks_21", cline: "terminal", commandcode: "terminal", opencode: "code", warp: "rocket_launch",
+diff --git a/providers/get-provider-health b/providers/get-provider-health
+index 3c17ef9..eaadc3c 100755
+--- a/providers/get-provider-health
++++ b/providers/get-provider-health
+@@ -144,6 +144,11 @@ status_for() {
+     zai|z.ai) has_any_env ZAI_API_KEY GLM_API_KEY ZHIPU_API_KEY || { status="missing"; detail="ZAI_API_KEY"; } ;;
+     mistral) has_any_env MISTRAL_API_KEY || { status="missing"; detail="MISTRAL_API_KEY"; } ;;
+     ollama) command -v ollama >/dev/null 2>&1 || { status="missing"; detail="ollama CLI"; } ;;
++    lmstudio|lm-studio)
++      base="${LMSTUDIO_HOST:-http://localhost:1234}"; base="${base%/}"
++      curl -sS --max-time 3 -o /dev/null "${base}/v1/models" 2>/dev/null \
++        || { status="missing"; detail="LM Studio server at ${base}"; }
++      ;;
+     nvidia|nim) has_any_env NVIDIA_API_KEY || { status="missing"; detail="NVIDIA_API_KEY"; } ;;
+     cloudflare) has_any_env CLOUDFLARE_AI_TOKEN CLOUDFLARE_API_TOKEN || { status="missing"; detail="Cloudflare API token"; } ;;
+     vertexai|vertex) command -v gcloud >/dev/null 2>&1 || { status="missing"; detail="gcloud CLI"; } ;;
+diff --git a/providers/get-provider-usage b/providers/get-provider-usage
+index b649d33..f96a06f 100755
+--- a/providers/get-provider-usage
++++ b/providers/get-provider-usage
+@@ -127,6 +127,7 @@ source "$SCRIPT_DIR/native/zai.bash"
+ source "$SCRIPT_DIR/native/mistral.bash"
+ # shellcheck source=providers/native/ollama.bash
+ source "$SCRIPT_DIR/native/ollama.bash"
++source "$SCRIPT_DIR/native/lmstudio.bash"
+ # shellcheck source=providers/native/nvidia.bash
+ source "$SCRIPT_DIR/native/nvidia.bash"
+ # shellcheck source=providers/native/cloudflare.bash
+@@ -1090,6 +1091,9 @@ fetch_provider() {
+     ollama)
+       fetch_ollama_native
+       ;;
++    lmstudio|lm-studio)
++      fetch_lmstudio_native
++      ;;
+     nvidia|nim)
+       fetch_nvidia_native
+       ;;
+diff --git a/providers/native/ollama.bash b/providers/native/ollama.bash
+index 8d3ea6f..46bde48 100644
+--- a/providers/native/ollama.bash
++++ b/providers/native/ollama.bash
+@@ -1,6 +1,6 @@
+ # Sourced adapter; shared transport/normalization helpers live in get-provider-usage.
+ fetch_ollama_native() {
+-  local base="${OLLAMA_HOST:-http://localhost:11434}"
++  local base="${OLLAMA_HOST:-http://localhost:11435}"
+   base="${base%/}"
+   local tmp_body tmp_ps http_status
+   tmp_body="$(mktemp)"
+@@ -31,15 +31,17 @@ fetch_ollama_native() {
+             usedPercent: 0,
+             windowMinutes: null,
+             resetsAt: null,
+-            resetDescription: ("Local — " + ($count | tostring) + " model(s)"),
+-            displayValue: $model_list
++            resetDescription: (if $running_list == "No models running" then "No model running" else "Running now" end),
++            displayValue: $running_list
+           },
+           secondary: {
+             usedPercent: 0,
+             windowMinutes: null,
+             resetsAt: null,
+-            resetDescription: "Running now",
+-            displayValue: $running_list
++            resetDescription: ("Catalog — " + ($count | tostring) + " model(s)"),
++            displayValue: (if $model_list == "No models loaded" then $model_list
++              else (($model_list | split(", ")) as $m | ($m[0] + (if ($m | length) > 1 then " (+" + ((($m | length) - 1) | tostring) + " more)" else "" end)))
++              end)
+           },
+           tertiary: null,
+           updatedAt: (now | todateiso8601)
