@@ -1,8 +1,8 @@
 """omi-media CLI surface (Omi Media Launcher spec §9–§11).
 
-The stable command-line contract between playlist discovery and every
-presentation layer (DMS popup, scripts, later Pi agent).  Usable with no
-desktop session at all.
+The stable command-line contract between playlist discovery, the player
+launcher and every presentation layer (the DMS "Ominty Playlist Selector",
+scripts, later a Pi agent).  Usable with no desktop session at all.
 """
 
 from __future__ import annotations
@@ -13,6 +13,7 @@ import sys
 
 from . import __version__
 from . import config as cfg
+from .players import launch, stop
 
 
 def _out(obj: dict, use_json: bool) -> int:
@@ -66,7 +67,6 @@ def cmd_playlists(args: argparse.Namespace) -> int:
 def cmd_play(args: argparse.Namespace) -> int:
     """Hand a playlist to its category's player (spec §11)."""
     from .discovery import discover_playlists
-    from .players import launch
 
     spec = cfg.categories(cfg.load_config(args.config)).get(args.category)
     if not spec:
@@ -97,10 +97,19 @@ def cmd_play(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_stop(args: argparse.Namespace) -> int:
+    """Stop the player that omi-media started (spec §11)."""
+    result = stop(dry_run=args.dry_run)
+    if args.json:
+        return _out(result, True)
+    print(result["status"])
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
         prog="omi-media",
-        description="Omi media launcher — discover and play .m3u playlists.",
+        description="Omi media launcher — discover playlists and hand them to a player.",
     )
     p.add_argument("-V", "--version", action="version", version=f"omi-media {__version__}")
     p.add_argument("--config", help="path to media.toml (default: ~/.config/omi/media.toml)")
@@ -121,6 +130,12 @@ def build_parser() -> argparse.ArgumentParser:
     pl_p.add_argument("--dry-run", action="store_true", help="print the command, do not launch")
     pl_p.add_argument("--json", action="store_true")
     pl_p.set_defaults(func=cmd_play)
+
+    st_p = sub.add_parser("stop", help="stop the player omi-media started")
+    st_p.add_argument("--dry-run", action="store_true")
+    st_p.add_argument("--json", action="store_true")
+    st_p.set_defaults(func=cmd_stop)
+
     return p
 
 

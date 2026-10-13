@@ -44,11 +44,11 @@ def state_dir() -> Path:
 DEFAULT_ROOT = os.environ.get("OMI_MEDIA_ROOT") or str(Path.home() / "Playlist")
 
 DEFAULT_CATEGORIES = {
-    # mpv's force-window=auto shows no window for audio files without cover
+    # VLC for every category: it always opens a real player window and speaks
     # art, so audio/music always request the controller window explicitly.
-    "audio": {"name": "Audio", "directory": "{root}/Audio", "player": "mpv", "player_args": ["--force-window=yes"]},
+    "audio": {"name": "Audio", "directory": "{root}/Audio", "player": "vlc", "player_args": []},
     "courses": {"name": "Courses", "directory": "{root}/Courses", "player": "vlc", "player_args": []},
-    "music": {"name": "Music", "directory": "{root}/Music", "player": "mpv", "player_args": ["--force-window=yes"]},
+    "music": {"name": "Music", "directory": "{root}/Music", "player": "vlc", "player_args": []},
     "video": {"name": "Video", "directory": "{root}/Video", "player": "vlc", "player_args": []},
 }
 

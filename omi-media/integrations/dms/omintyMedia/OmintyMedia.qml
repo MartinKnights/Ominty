@@ -8,17 +8,16 @@ import qs.Common
 import qs.Widgets
 import qs.Modules.Plugins
 
-// Ominty Media — DMS popup over the omi-media service
-// (Omi Media Launcher spec). Holds NO logic: it shells out to `omi-media`
-// (categories / playlists / play) and renders the JSON.
+// Ominty Playlist Selector — DMS popup over the omi-media service.
 //
-// Keyboard-first (Omi Quick Action pattern): type → filter → ↑/↓ → Enter play,
-// Ctrl+[ / Ctrl+] switch category tab, Esc close. Buttons are also clickable.
+// A **selector only**: category tabs → filter → choose a playlist.  Choosing
+// one hands it to a separate player application (vlc/mpv, per media.toml) and
+// the popup closes immediately.  The player is controlled in its own window
+// and via the desktop's MPRIS media widget (the small pill), not here.
 //
-// TWO layer surfaces on purpose (same as the dictionary popup):
-//   - dimWindow   (ominty:media-dim)  fullscreen dim backdrop + click outside
-//   - overlay     (ominty:media)      the panel, centered via 4-anchor margins
-
+// Single surface (no full-screen dim) so the mouse reaches the list, tabs and
+// close button.  Keyboard: type → filter → ↑/↓ → Enter (play), Ctrl+[ / Ctrl+]
+// switch category, Esc close.  Click works everywhere.
 PluginComponent {
     id: root
 
@@ -29,16 +28,16 @@ PluginComponent {
     property int _itemIndex: -1
     property bool _loading: false
     property string _error: ""
+    property bool _visible: false
 
     readonly property string mediaCli: Quickshell.env("OMI_MEDIA_CLI") || "omi-media"
 
     function _setVisible(v: bool) {
-        dimWindow.visible = v;
-        overlay.visible = v;
+        root._visible = v;
     }
     function _open() {
         root._setVisible(true);
-        root._loadCats();
+        if (root._categories.length === 0) root._loadCats();
         searchField.forceActiveFocus();
     }
     function _close() {
@@ -54,6 +53,12 @@ PluginComponent {
         searchField.text = "";
         root._loadPlaylists(id);
     }
+    function _cycleCat(dir: int) {
+        if (root._categories.length === 0) return;
+        let i = root._categories.findIndex(c => c.id === root._activeCat);
+        i = (i + dir + root._categories.length) % root._categories.length;
+        root._selectCat(root._categories[i].id);
+    }
     function _loadPlaylists(id: string) {
         root._loading = true;
         root._error = "";
@@ -61,7 +66,9 @@ PluginComponent {
         listProc.command = [root.mediaCli, "playlists", id, "--json"];
         listProc.running = true;
     }
+    // Hand the playlist to its player, then get out of the way.
     function _play(name: string) {
+        if (name === "") return;
         playProc.running = false;
         playProc.command = [root.mediaCli, "play", root._activeCat, name];
         playProc.running = true;
@@ -78,38 +85,17 @@ PluginComponent {
         for (let c of root._categories) if (c.id === root._activeCat) return c.name;
         return "";
     }
-    function _cycleCat(dir: int) {
-        if (root._categories.length === 0) return;
-        let i = root._categories.findIndex(c => c.id === root._activeCat);
-        i = (i + dir + root._categories.length) % root._categories.length;
-        root._selectCat(root._categories[i].id);
-    }
 
-    // ---- IPC -------------------------------------------------------------
+    // ---- IPC ---------------------------------------------------------------
     IpcHandler {
         target: "omintyMedia"
-
-        function open(): string {
-            root._open();
-            return "opened";
-        }
-        function toggle(): string {
-            if (overlay.visible) { root._close(); return "closed"; }
-            root._open();
-            return "opened";
-        }
-        function close(): string {
-            root._close();
-            return "closed";
-        }
-        function openCategory(id: string): string {
-            root._open();
-            root._selectCat(id);
-            return "opened";
-        }
+        function open(): string { root._open(); return "opened" }
+        function toggle(): string { if (root._visible) { root._close(); return "closed" } root._open(); return "opened" }
+        function close(): string { root._close(); return "closed" }
+        function openCategory(id: string): string { root._open(); root._selectCat(id); return "opened" }
     }
 
-    // ---- omi-media processes --------------------------------------------
+    // ---- omi-media processes -----------------------------------------------
     Process {
         id: catsProc
         command: [root.mediaCli, "categories", "--json"]
@@ -121,8 +107,10 @@ PluginComponent {
                     root._categories = (data.categories || []).map(c => ({
                         id: c.id, name: c.name, count: c.playlist_count
                     }));
-                    const first = root._categories.find(c => c.count > 0) || root._categories[0];
-                    if (first) root._selectCat(first.id);
+                    if (root._activeCat === "") {
+                        const first = root._categories.find(c => c.count > 0) || root._categories[0];
+                        if (first) root._selectCat(first.id);
+                    }
                 } catch (e) {
                     console.warn("[omintyMedia] category list parse failed:", e);
                     root._error = "Could not read categories (omi-media categories)";
@@ -157,8 +145,7 @@ PluginComponent {
         running: false
         stdout: StdioCollector {
             // oi-media prints "launched: …" on success and exits — at that
-            // point remove the popup (and its full-screen dim) so the player
-            // window is not left hidden underneath it.
+            // point remove the popup so the player window is not left hidden.
             onStreamFinished: root._close()
         }
         stderr: StdioCollector {
@@ -168,63 +155,40 @@ PluginComponent {
         }
     }
 
-    // ---- Surface 1: fullscreen dim + click-outside -----------------------
-    PanelWindow {
-        id: dimWindow
-        visible: false
-        color: "transparent"
-
-        WlrLayershell.namespace: "ominty:media-dim"
-        WlrLayershell.layer: WlrLayershell.Overlay
-        WlrLayershell.exclusiveZone: -1
-
-        anchors { top: true; bottom: true; left: true; right: true }
-
-        Rectangle {
-            anchors.fill: parent
-            color: Qt.rgba(0, 0, 0, 0.55)
-            MouseArea {
-                anchors.fill: parent
-                onClicked: root._close()
-            }
-        }
-    }
-
-    // ---- Surface 2: the blurred panel (centered by 4-anchor margins) -----
+    // ---- The panel (single surface) ----------------------------------------
     PanelWindow {
         id: overlay
-        visible: false
+        visible: root._visible
         color: "transparent"
-
         WlrLayershell.namespace: "ominty:media"
         WlrLayershell.layer: WlrLayershell.Overlay
         WlrLayershell.exclusiveZone: -1
         WlrLayershell.keyboardFocus: WlrKeyboardFocus.Exclusive
 
-        readonly property int pw: Math.min(620, (overlay.screen ? overlay.screen.width : 1920) - 80)
-        readonly property int ph: Math.min(560, (overlay.screen ? overlay.screen.height : 1080) - 80)
+        readonly property int pw: Math.min(660, (overlay.screen ? overlay.screen.width : 1920) - 80)
+        readonly property int ph: Math.min(600, (overlay.screen ? overlay.screen.height : 1080) - 80)
         readonly property int mh: Math.max(0, Math.round(((overlay.screen ? overlay.screen.width : 1920) - pw) / 2))
         readonly property int mv: Math.max(0, Math.round(((overlay.screen ? overlay.screen.height : 1080) - ph) / 2))
-
         anchors { top: true; bottom: true; left: true; right: true }
         margins { left: overlay.mh; right: overlay.mh; top: overlay.mv; bottom: overlay.mv }
 
-        Keys.onPressed: event => {
-            if (event.key === Qt.Key_Escape) {
-                root._close(); event.accepted = true;
-            } else if (event.key === Qt.Key_L && (event.modifiers & Qt.ControlModifier)) {
-                searchField.forceActiveFocus(); event.accepted = true;
-            } else if (event.key === Qt.Key_BracketLeft && (event.modifiers & Qt.ControlModifier)) {
-                root._cycleCat(-1); event.accepted = true;
-            } else if (event.key === Qt.Key_BracketRight && (event.modifiers & Qt.ControlModifier)) {
-                root._cycleCat(1); event.accepted = true;
-            }
-        }
-
         Rectangle {
+            id: panelBg
             anchors.fill: parent
             radius: 12
-            color: Theme.withAlpha(Theme.surface, 0.8)
+            color: Theme.withAlpha(Theme.surface, 0.94)
+            border.width: 1
+            border.color: Theme.withAlpha(Theme.outline, 0.5)
+            focus: true
+            Keys.onPressed: event => {
+                if (event.key === Qt.Key_Escape) {
+                    root._close(); event.accepted = true;
+                } else if (event.key === Qt.Key_BracketLeft && (event.modifiers & Qt.ControlModifier)) {
+                    root._cycleCat(-1); event.accepted = true;
+                } else if (event.key === Qt.Key_BracketRight && (event.modifiers & Qt.ControlModifier)) {
+                    root._cycleCat(1); event.accepted = true;
+                }
+            }
 
             ColumnLayout {
                 anchors.fill: parent
@@ -236,12 +200,11 @@ PluginComponent {
                     Layout.fillWidth: true
                     spacing: Theme.spacingM
                     StyledText {
-                        text: "Media"
+                        text: "Ominty Playlist Selector"
                         font.pixelSize: Theme.fontSizeLarge
                         font.weight: Font.Bold
                         color: Theme.surfaceText
                     }
-                    StyledText { text: "local · playlists"; color: Theme.surfaceVariantText }
                     Item { Layout.fillWidth: true }
                     Rectangle {
                         width: 30; height: 30; radius: 15; color: "#45475a"
@@ -260,7 +223,7 @@ PluginComponent {
                             required property var modelData
                             readonly property bool active: modelData.id === root._activeCat
                             Layout.fillWidth: true
-                            Layout.preferredHeight: 40
+                            Layout.preferredHeight: 38
                             radius: 8
                             color: active ? Theme.primary : "transparent"
                             border.width: active ? 0 : 1
@@ -276,10 +239,7 @@ PluginComponent {
                                     font.weight: active ? Font.Bold : Font.Normal
                                 }
                                 Item { Layout.fillWidth: true }
-                                StyledText {
-                                    text: modelData.count
-                                    color: active ? "black" : Theme.surfaceVariantText
-                                }
+                                StyledText { text: modelData.count; color: active ? "black" : Theme.surfaceVariantText }
                             }
                             MouseArea {
                                 anchors.fill: parent

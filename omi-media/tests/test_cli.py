@@ -35,6 +35,8 @@ def _env(tmp_path: Path) -> dict:
     env["XDG_DATA_HOME"] = str(tmp_path / "data")
     env["XDG_CONFIG_HOME"] = str(tmp_path / "cfg")
     env["XDG_STATE_HOME"] = str(tmp_path / "state")
+    env["XDG_RUNTIME_DIR"] = str(tmp_path / "run")
+    (tmp_path / "run").mkdir(exist_ok=True)
     return env, cfg_file
 
 
@@ -84,19 +86,24 @@ def test_play_accepts_title_without_extension(tmp_path):
     assert out.returncode == 0
     data = json.loads(out.stdout)
     assert data["command"][0] == "mpv"
-    # music is overridden in the test config (name+player only): the mpv
-    # force-window flag must survive the partial override (per-key merge).
-    assert "--force-window=yes" in data["command"]
+    assert data["command"][-1].endswith("Gospel.m3u")
 
 
-def test_audio_default_includes_force_window(tmp_path):
+def test_audio_default_uses_vlc(tmp_path):
     env, cfg = _env(tmp_path)
     out = _run(env, cfg, "play", "audio", "Classical.m3u", "--dry-run", "--json")
     assert out.returncode == 0
     data = json.loads(out.stdout)
-    assert data["command"][0] == "mpv"
-    assert "--force-window=yes" in data["command"]
+    # audio uses the same MPRIS-capable player as video (real window + pill)
+    assert data["command"][0] == "vlc"
     assert data["command"][-1].endswith("Classical.m3u")
+
+
+def test_stop_idle_when_nothing_playing(tmp_path):
+    env, cfg = _env(tmp_path)
+    out = _run(env, cfg, "stop", "--json")
+    assert out.returncode == 0
+    assert json.loads(out.stdout)["status"] == "idle"
 
 
 def test_unknown_category_errors(tmp_path):
