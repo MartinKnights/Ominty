@@ -1,0 +1,22 @@
+diff --git a/DankHooks/DankHooks.qml b/DankHooks/DankHooks.qml
+index 40491d9..f639037 100644
+--- a/DankHooks/DankHooks.qml
++++ b/DankHooks/DankHooks.qml
+@@ -262,7 +262,16 @@ PluginComponent {
+         const process = hookProcessComponent.createObject(root, {
+             hookScript: scriptPath,
+             hookName: hookName,
+-            hookValue: hookValue
++            hookValue: hookValue,
++            // Set the environment synchronously here: the `environment` binding
++            // in the component re-evaluates asynchronously, so starting the
++            // process right after createObject would run it with the binding's
++            // initial (empty) values -> `sh -c '"" ...'` -> "Permission denied".
++            environment: {
++                "HOOK_SCRIPT": scriptPath,
++                "HOOK_NAME": hookName,
++                "HOOK_VALUE": hookValue
++            }
+         });
+ 
+         if (!process) {

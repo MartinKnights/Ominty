@@ -1,0 +1,666 @@
+diff --git a/MailReaderPopout.qml b/MailReaderPopout.qml
+index a4208b5..887fb17 100644
+--- a/MailReaderPopout.qml
++++ b/MailReaderPopout.qml
+@@ -44,7 +44,7 @@ PopoutComponent {
+     function openMessage(message) {
+         root.selectedMessage = message;
+         root.detailMode = true;
+-        Services.MailService.readMessage(message.id);
++        Services.MailService.readMessage(message.id, message.accountIndex);
+     }
+ 
+     function backToList() {
+@@ -117,7 +117,7 @@ PopoutComponent {
+                                 width: parent.width
+                                 text: root.detailMode
+                                       ? (root.selectedMessage ? root.selectedMessage.subject : "Mail Content")
+-                                      : (Services.MailService.accountName || "Mail")
++                                      : "Mail"
+                                 font.pixelSize: Theme.fontSizeMedium + 1
+                                 font.weight: Font.Bold
+                                 color: Theme.surfaceText
+@@ -135,7 +135,7 @@ PopoutComponent {
+                                         return "Checking...";
+                                     if (!Services.MailService.ok && Services.MailService.lastError.length > 0)
+                                         return "Check failed";
+-                                    return Services.MailService.unreadCount + " unread, " + Services.MailService.messages.length + " shown";
++                                    return Services.MailService.unreadCount + " unread · " + Services.MailService.messages.length + " shown · " + Services.MailService.accountsStatus.length + " accounts";
+                                 }
+                                 font.pixelSize: Theme.fontSizeSmall
+                                 color: Theme.surfaceVariantText
+@@ -306,11 +306,25 @@ PopoutComponent {
+                                         }
+                                     }
+ 
+-                                    StyledText {
++                                    Column {
+                                         Layout.alignment: Qt.AlignVCenter
+-                                        text: root.fmtAgo(modelData.timestamp)
+-                                        font.pixelSize: 10
+-                                        color: Theme.surfaceVariantText
++                                        spacing: 2
++                                        StyledText {
++                                            width: parent.width
++                                            horizontalAlignment: Text.AlignRight
++                                            text: modelData.accountName || ""
++                                            visible: text.length > 0
++                                            font.pixelSize: 9
++                                            color: Theme.primary
++                                            elide: Text.ElideRight
++                                        }
++                                        StyledText {
++                                            width: parent.width
++                                            horizontalAlignment: Text.AlignRight
++                                            text: root.fmtAgo(modelData.timestamp)
++                                            font.pixelSize: 10
++                                            color: Theme.surfaceVariantText
++                                        }
+                                     }
+                                 }
+ 
+diff --git a/MailReaderSettings.qml b/MailReaderSettings.qml
+index ad1dfe7..a67d8cf 100644
+--- a/MailReaderSettings.qml
++++ b/MailReaderSettings.qml
+@@ -17,94 +17,31 @@ PluginSettings {
+ 
+     StyledText {
+         width: parent.width
+-        text: "Lists an IMAP mailbox without changing message state. Opening a message displays its content here and marks it as read on the server."
++        text: "Lists IMAP mailboxes without changing message state. Opening a message displays its content here and marks it as read on the server. Add as many accounts as you like — the bar badge shows the total unread across all of them."
+         font.pixelSize: Theme.fontSizeSmall
+         color: Theme.surfaceVariantText
+         wrapMode: Text.WordWrap
+     }
+ 
+-    StringSetting {
+-        settingKey: "accountName"
+-        label: "Account Name"
+-        description: "Display name for this account (e.g. Personal)"
+-        defaultValue: ""
+-        placeholder: "Personal"
+-    }
+-
+-    SelectionSetting {
+-        settingKey: "authMethod"
+-        label: "Authentication"
+-        description: "Use a password command for generic IMAP, or OAuth2 for Gmail"
+-        defaultValue: "password"
+-        options: [
+-            { label: "IMAP password command", value: "password" },
+-            { label: "Gmail OAuth2", value: "gmail" }
+-        ]
+-    }
+-
+-    StringSetting {
+-        settingKey: "clientId"
+-        label: "Google OAuth Client ID"
+-        description: "Gmail only: create a Google Desktop client ID, then run scripts/authorize-gmail.py in a terminal. See README; do not enter a client secret."
+-        defaultValue: ""
+-        placeholder: "Google: 123-abc.apps.googleusercontent.com"
+-    }
+-
+-    StringSetting {
+-        settingKey: "imapHost"
+-        label: "IMAP Host"
+-        description: "Hostname of your IMAP server"
+-        defaultValue: ""
+-        placeholder: "imap.example.com"
+-    }
+-
+-    StringSetting {
+-        settingKey: "imapPort"
+-        label: "IMAP Port"
+-        description: "Leave empty for the default port (993 for SSL/TLS, 143 for STARTTLS)"
+-        defaultValue: ""
+-        placeholder: "993"
+-    }
+-
+-    SelectionSetting {
+-        settingKey: "security"
+-        label: "Connection Security"
+-        description: "How to secure the IMAP connection"
+-        defaultValue: "ssl"
+-        options: [
+-            { label: "SSL/TLS (implicit, port 993)", value: "ssl" },
+-            { label: "STARTTLS (port 143)", value: "starttls" }
++    ListSettingWithInput {
++        settingKey: "accounts"
++        label: "Accounts"
++        description: "One row per mailbox. auth = 'password' (uses the password command) or 'gmail' (OAuth2 — needs the Google client id, no password command). Port/security/folder default to 993 / SSL / INBOX."
++        defaultValue: []
++        fields: [
++            { id: "name", label: "Name", placeholder: "Personal", width: 130, required: true },
++            { id: "authMethod", label: "Auth", placeholder: "password", width: 100 },
++            { id: "host", label: "IMAP Host", placeholder: "imap.example.com", width: 190, required: true },
++            { id: "username", label: "Username", placeholder: "you@example.com", width: 200, required: true },
++            { id: "passwordCommand", label: "Password Command", placeholder: "secret-tool lookup service imap account you@example.com", width: 300 },
++            { id: "clientId", label: "Google Client ID", placeholder: "gmail only: 123-abc.apps.googleusercontent.com", width: 250 }
+         ]
+     }
+ 
+-    StringSetting {
+-        settingKey: "username"
+-        label: "Username"
+-        description: "IMAP login, usually your e-mail address"
+-        defaultValue: ""
+-        placeholder: "you@example.com"
+-    }
+-
+-    StringSetting {
+-        settingKey: "passwordCommand"
+-        label: "Password Command"
+-        description: "Generic IMAP only: command that prints the password. Use secret-tool or pass; never store passwords directly in settings. Leave empty for OAuth2."
+-        defaultValue: ""
+-        placeholder: "secret-tool lookup service imap account you@example.com"
+-    }
+-
+-    StringSetting {
+-        settingKey: "folder"
+-        label: "Folder"
+-        description: "Mailbox folder to check"
+-        defaultValue: "INBOX"
+-        placeholder: "INBOX"
+-    }
+-
+     StringSetting {
+         settingKey: "displayLimit"
+-        label: "Display Mail Count"
+-        description: "How many messages to show. 0 = show all messages, x = show latest x messages."
++        label: "Display Mail Count (per account)"
++        description: "How many messages to show from each account. 0 = all messages, x = latest x."
+         defaultValue: "20"
+         placeholder: "20"
+     }
+@@ -140,4 +77,4 @@ PluginSettings {
+         description: "Keep mail notifications on screen until manually closed"
+         defaultValue: true
+     }
+-}
++}
+\ No newline at end of file
+diff --git a/MailReaderWidget.qml b/MailReaderWidget.qml
+index 9f7d205..11d68d7 100644
+--- a/MailReaderWidget.qml
++++ b/MailReaderWidget.qml
+@@ -24,16 +24,14 @@ PluginComponent {
+         if (isNaN(pollInterval) || pollInterval < 0)
+             pollInterval = 60;
+ 
++        var accounts = [];
++        if (Array.isArray(pluginData.accounts)) {
++            accounts = pluginData.accounts;
++        } else if (typeof pluginData.accounts === "string" && pluginData.accounts.length > 0) {
++            try { accounts = JSON.parse(pluginData.accounts); } catch (e) { accounts = []; }
++        }
+         Services.MailService.configure({
+-            accountName: pluginData.accountName || "",
+-            authMethod: pluginData.authMethod || "password",
+-            clientId: pluginData.clientId || "",
+-            imapHost: pluginData.imapHost || "",
+-            imapPort: pluginData.imapPort || "",
+-            security: pluginData.security || "ssl",
+-            username: pluginData.username || "",
+-            passwordCommand: pluginData.passwordCommand || "",
+-            folder: pluginData.folder || "INBOX",
++            accounts: accounts,
+             displayLimit: displayLimit,
+             pollInterval: pollInterval,
+             notifyOnNew: pluginData.notifyOnNew !== false,
+diff --git a/services/MailService.qml b/services/MailService.qml
+index 98e64a6..82f24f4 100644
+--- a/services/MailService.qml
++++ b/services/MailService.qml
+@@ -8,13 +8,14 @@ Singleton {
+     id: root
+ 
+     // --- Status ---
+-    readonly property bool configured: imapHost.length > 0 && username.length > 0
++    readonly property bool configured: root._validAccounts.length > 0
+     property bool checking: false
+     property bool ok: false
+     property string lastError: ""
+     property int unreadCount: 0
+     property var messages: []
+     property var lastChecked: null
++    property var accountsStatus: []   // [{name, ok, error, unread}]
+ 
+     // --- Content reading status ---
+     property bool readingContent: false
+@@ -24,15 +25,7 @@ Singleton {
+     property var currentEmail: null
+ 
+     // --- Config (set by Widget from pluginData) ---
+-    property string accountName: ""
+-    property string authMethod: "password"
+-    property string clientId: ""
+-    property string imapHost: ""
+-    property string imapPort: ""
+-    property string security: "ssl"
+-    property string username: ""
+-    property string passwordCommand: ""
+-    property string folder: "INBOX"
++    property var accounts: []         // [{name, authMethod, clientId, host, port, security, username, passwordCommand, folder}]
+     property int displayLimit: 20
+     property int pollInterval: 60
+     property bool notifyOnNew: true
+@@ -40,15 +33,23 @@ Singleton {
+     property bool persistentNotification: true
+     property bool popoutOpen: false
+ 
+-    // Server UID state gives notifications a stable baseline independent of
+-    // the number of messages currently shown in the popout.
+-    property string _uidValidity: ""
+-    property double _lastUid: 0
+-    property bool _firstCheck: true
+-    property string _mailboxKey: ""
++    readonly property var _validAccounts: {
++        var out = [];
++        for (var i = 0; i < root.accounts.length; i++) {
++            var a = root.accounts[i];
++            if (a && (a.host || "").length > 0 && (a.username || "").length > 0)
++                out.push(a);
++        }
++        return out;
++    }
++
++    // Per-account UID state, keyed by account key (survives reconfigures).
++    property var _state: ({})
++    property string _accountsSignature: ""
+     property int _configRevision: 0
+     property bool _pendingRefresh: false
+     property string _wantedMessageId: ""
++    property int _wantedAccountIndex: -1
+     property string _checkStdout: ""
+     property string _checkStderr: ""
+     property string _readStdout: ""
+@@ -59,42 +60,49 @@ Singleton {
+     readonly property string _iconPath: decodeURIComponent(
+             Qt.resolvedUrl("../assets/mail-notification.png").toString()).replace("file://", "")
+ 
++    function _normalize(a) {
++        return {
++            name: (a && a.name) ? a.name : ((a && (a.username || a.host)) ? (a.username || a.host) : "Mail"),
++            authMethod: (a && a.authMethod) ? a.authMethod : "password",
++            clientId: (a && a.clientId) ? a.clientId : "",
++            host: (a && a.host ? a.host : "").trim(),
++            port: (a && a.port ? String(a.port) : "").trim(),
++            security: (a && a.security) ? a.security : "ssl",
++            username: (a && a.username ? a.username : "").trim(),
++            passwordCommand: (a && a.passwordCommand) ? a.passwordCommand : "",
++            folder: (a && a.folder) ? a.folder : "INBOX"
++        };
++    }
++
++    function _accountKey(a) {
++        return [a.host, a.port, a.security, a.username, a.folder,
++                a.authMethod, a.clientId].join("\n");
++    }
++
++    function _signature() {
++        var parts = [];
++        for (var i = 0; i < root._validAccounts.length; i++) {
++            var a = root._normalize(root._validAccounts[i]);
++            parts.push([a.host, a.port, a.security, a.username, a.folder,
++                        a.authMethod, a.clientId, a.passwordCommand].join("|"));
++        }
++        return parts.join("§") + "#" + root.displayLimit;
++    }
++
+     function configure(config) {
+-        var host = (config.imapHost || "").trim();
+-        var user = (config.username || "").trim();
+-        var port = (config.imapPort || "").trim();
+-        var nextMailboxKey = [host, port, config.security, user, config.folder,
+-                              config.authMethod, config.clientId].join("\n");
+-        var mailboxChanged = root._mailboxKey !== nextMailboxKey;
+-        var queryChanged = mailboxChanged
+-                || root.passwordCommand !== config.passwordCommand
+-                || root.displayLimit !== config.displayLimit;
+-
+-        root.accountName = config.accountName;
+-        root.authMethod = config.authMethod;
+-        root.clientId = config.clientId;
+-        root.imapHost = host;
+-        root.imapPort = port;
+-        root.security = config.security;
+-        root.username = user;
+-        root.passwordCommand = config.passwordCommand;
+-        root.folder = config.folder;
++        root.accounts = config.accounts || [];
+         root.displayLimit = config.displayLimit;
+         root.pollInterval = config.pollInterval;
+         root.notifyOnNew = config.notifyOnNew;
+         root.notifyOnStartup = config.notifyOnStartup;
+         root.persistentNotification = config.persistentNotification;
+-        root._mailboxKey = nextMailboxKey;
+ 
+-        if (queryChanged)
++        var sig = root._signature();
++        var changed = sig !== root._accountsSignature;
++        root._accountsSignature = sig;
++        if (changed) {
+             root._configRevision++;
+-        if (mailboxChanged) {
+-            root._firstCheck = true;
+-            root._uidValidity = "";
+-            root._lastUid = 0;
+             root.ok = false;
+-            root.unreadCount = 0;
+-            root.messages = [];
+             root.lastError = "";
+             root.cancelRead();
+         }
+@@ -103,10 +111,11 @@ Singleton {
+             root.ok = false;
+             root.unreadCount = 0;
+             root.messages = [];
++            root.accountsStatus = [];
+             root.lastError = "";
+             return;
+         }
+-        if (queryChanged)
++        if (changed)
+             refresh(true);
+     }
+ 
+@@ -125,28 +134,31 @@ Singleton {
+ 
+     onPopoutOpenChanged: if (popoutOpen) refresh()
+ 
+-    function _startRead(messageId) {
+-        root.readingContent = true;
+-        readProc.messageId = messageId;
+-        readProc.requestRevision = root._configRevision;
+-        readProc.running = true;
+-    }
+-
+-    function readMessage(messageId) {
++    function readMessage(messageId, accountIndex) {
+         if (!configured || !messageId)
+             return;
+         root._wantedMessageId = messageId;
++        root._wantedAccountIndex = (accountIndex === undefined ? -1 : accountIndex);
+         root.readingContent = true;
+         root.readOk = false;
+         root.readError = "";
+         root.currentEmailMarkedSeen = false;
+         root.currentEmail = null;
+         if (!readProc.running)
+-            _startRead(messageId);
++            _startRead(messageId, root._wantedAccountIndex);
++    }
++
++    function _startRead(messageId, accountIndex) {
++        root.readingContent = true;
++        readProc.messageId = messageId;
++        readProc.accountIndex = accountIndex;
++        readProc.requestRevision = root._configRevision;
++        readProc.running = true;
+     }
+ 
+     function cancelRead() {
+         root._wantedMessageId = "";
++        root._wantedAccountIndex = -1;
+         root.readingContent = false;
+         root.readOk = false;
+         root.readError = "";
+@@ -190,24 +202,27 @@ Singleton {
+             root._checkStderr = "";
+             // Config goes through stdin so credentials-related settings
+             // never show up in the process list.
+-            var config = {
+-                action: "list",
+-                accounts: [{
+-                    name: root.accountName,
+-                    authMethod: root.authMethod,
+-                    clientId: root.clientId,
+-                    host: root.imapHost,
+-                    port: root.imapPort,
+-                    security: root.security,
+-                    username: root.username,
+-                    passwordCommand: root.passwordCommand,
+-                    folder: root.folder,
++            var list = [];
++            var valid = root._validAccounts;
++            for (var i = 0; i < valid.length; i++) {
++                var a = root._normalize(valid[i]);
++                var st = root._state[root._accountKey(a)] || {};
++                list.push({
++                    name: a.name,
++                    authMethod: a.authMethod,
++                    clientId: a.clientId,
++                    host: a.host,
++                    port: a.port,
++                    security: a.security,
++                    username: a.username,
++                    passwordCommand: a.passwordCommand,
++                    folder: a.folder,
+                     displayLimit: root.displayLimit,
+-                    previousUidValidity: root._uidValidity,
+-                    lastUid: root._lastUid
+-                }]
+-            };
+-            checkProc.write(JSON.stringify(config) + "\n");
++                    previousUidValidity: st.uidValidity || "",
++                    lastUid: st.lastUid || 0
++                });
++            }
++            checkProc.write(JSON.stringify({ action: "list", accounts: list }) + "\n");
+         }
+         stdout: StdioCollector {
+             onStreamFinished: root._checkStdout = this.text
+@@ -228,6 +243,7 @@ Singleton {
+     Process {
+         id: readProc
+         property string messageId: ""
++        property int accountIndex: -1
+         property int requestRevision: 0
+         command: ["python3", root._scriptPath]
+         running: false
+@@ -235,19 +251,24 @@ Singleton {
+         onStarted: {
+             root._readStdout = "";
+             root._readStderr = "";
++            var valid = root._validAccounts;
++            var idx = readProc.accountIndex;
++            var cfg = (idx >= 0 && idx < valid.length)
++                    ? root._normalize(valid[idx])
++                    : (valid.length > 0 ? root._normalize(valid[0]) : root._normalize({}));
+             var config = {
+                 action: "read",
+                 messageId: readProc.messageId,
+                 account: {
+-                    name: root.accountName,
+-                    authMethod: root.authMethod,
+-                    clientId: root.clientId,
+-                    host: root.imapHost,
+-                    port: root.imapPort,
+-                    security: root.security,
+-                    username: root.username,
+-                    passwordCommand: root.passwordCommand,
+-                    folder: root.folder
++                    name: cfg.name,
++                    authMethod: cfg.authMethod,
++                    clientId: cfg.clientId,
++                    host: cfg.host,
++                    port: cfg.port,
++                    security: cfg.security,
++                    username: cfg.username,
++                    passwordCommand: cfg.passwordCommand,
++                    folder: cfg.folder
+                 }
+             };
+             readProc.write(JSON.stringify(config) + "\n");
+@@ -266,7 +287,7 @@ Singleton {
+                         || readProc.requestRevision !== root._configRevision)) {
+                 Qt.callLater(function() {
+                     if (root._wantedMessageId.length > 0 && !readProc.running)
+-                        root._startRead(root._wantedMessageId);
++                        root._startRead(root._wantedMessageId, root._wantedAccountIndex);
+                 });
+             } else if (root._wantedMessageId.length === 0) {
+                 root.readingContent = false;
+@@ -288,40 +309,91 @@ Singleton {
+             return;
+         }
+ 
+-        var accounts = data.accounts || [];
+-        if (accounts.length === 0) {
++        var results = data.accounts || [];
++        if (results.length === 0) {
+             root.ok = false;
+             root.lastError = data.error || "No account configured";
+             return;
+         }
+ 
+-        var acc = accounts[0];
+         root.lastChecked = new Date();
+-        if (!acc.ok) {
+-            root.ok = false;
+-            root.lastError = acc.error || "Check failed";
+-            return;
+-        }
+ 
+-        root.ok = true;
+-        root.lastError = "";
+-        root.unreadCount = acc.unread;
+-        root.messages = acc.messages || [];
+-
+-        var fresh = acc.newMessages || [];
+-        root._uidValidity = String(acc.uidValidity || "");
+-        root._lastUid = Number(acc.latestUid || 0);
+-        var isFirst = root._firstCheck;
+-        if (root._firstCheck) {
+-            root._firstCheck = false;
++        var valid = root._validAccounts;
++        var totalUnread = 0;
++        var merged = [];
++        var statuses = [];
++        var fresh = [];
++        var errors = [];
++        var anyOk = false;
++        var anyFirst = false;
++
++        for (var i = 0; i < results.length; i++) {
++            var acc = results[i];
++            var cfg = (i < valid.length) ? root._normalize(valid[i]) : null;
++            var name = cfg ? cfg.name : (acc.name || ("Account " + (i + 1)));
++            statuses.push({
++                name: name,
++                ok: acc.ok === true,
++                error: acc.error || "",
++                unread: Number(acc.unread || 0)
++            });
++            if (acc.ok !== true) {
++                errors.push(name + ": " + (acc.error || "check failed"));
++                continue;
++            }
++            anyOk = true;
++            totalUnread += Number(acc.unread || 0);
++
++            var msgs = acc.messages || [];
++            for (var j = 0; j < msgs.length; j++) {
++                var m = msgs[j];
++                merged.push({
++                    id: m.id,
++                    sender: m.sender,
++                    subject: m.subject,
++                    timestamp: m.timestamp,
++                    accountName: name,
++                    accountIndex: i
++                });
++            }
++
++            var nm = acc.newMessages || [];
++            for (var k = 0; k < nm.length; k++) {
++                var f = nm[k];
++                fresh.push({
++                    id: f.id,
++                    sender: f.sender,
++                    subject: f.subject,
++                    timestamp: f.timestamp,
++                    accountName: name
++                });
++            }
++
++            if (cfg) {
++                var key = root._accountKey(cfg);
++                var prev = root._state[key];
++                if (prev === undefined)
++                    anyFirst = true;
++                root._state[key] = {
++                    uidValidity: String(acc.uidValidity || ""),
++                    lastUid: Number(acc.latestUid || 0)
++                };
++            }
+         }
+ 
+-        var newCount = Number(acc.newCount || 0);
+-        if (isFirst) {
+-            if (root.notifyOnStartup && acc.unread > 0)
+-                _notifyStartup(acc.unread, root.messages);
+-        } else if (root.notifyOnNew && newCount > 0) {
+-            _notify(fresh, newCount);
++        merged.sort(function(a, b) { return (b.timestamp || 0) - (a.timestamp || 0); });
++
++        root.ok = anyOk;
++        root.unreadCount = totalUnread;
++        root.messages = merged;
++        root.accountsStatus = statuses;
++        root.lastError = errors.length > 0 ? (errors.length + " account(s) failed") : "";
++
++        if (anyFirst) {
++            if (root.notifyOnStartup && totalUnread > 0)
++                _notifyStartup(totalUnread, merged);
++        } else if (root.notifyOnNew && fresh.length > 0) {
++            _notify(fresh, fresh.length);
+         }
+     }
+ 
+@@ -375,7 +447,7 @@ Singleton {
+         if (unreadCount === 1) {
+             if (list.length >= 1) {
+                 title = "Unread mail from " + displaySender(list[0].sender);
+-                body = list[0].subject;
++                body = (list[0].accountName ? list[0].accountName + "\n" : "") + list[0].subject;
+             } else {
+                 title = "1 unread message";
+                 body = "";
+@@ -384,7 +456,8 @@ Singleton {
+             title = unreadCount + " unread messages";
+             var lines = [];
+             for (var i = 0; i < Math.min(list.length, Math.min(unreadCount, 5)); i++)
+-                lines.push(displaySender(list[i].sender) + ": " + list[i].subject);
++                lines.push("[" + (list[i].accountName || "Mail") + "] "
++                           + displaySender(list[i].sender) + ": " + list[i].subject);
+             body = lines.join("\n");
+         }
+         var icon = root._iconPath || "mail-unread";
+@@ -405,7 +478,7 @@ Singleton {
+         if (newCount === 1) {
+             if (fresh.length === 1) {
+                 title = "New mail from " + displaySender(fresh[0].sender);
+-                body = fresh[0].subject;
++                body = (fresh[0].accountName ? fresh[0].accountName + "\n" : "") + fresh[0].subject;
+             } else {
+                 title = "1 new message";
+                 body = "";
+@@ -414,7 +487,8 @@ Singleton {
+             title = newCount + " new messages";
+             var lines = [];
+             for (var i = 0; i < Math.min(fresh.length, 5); i++)
+-                lines.push(displaySender(fresh[i].sender) + ": " + fresh[i].subject);
++                lines.push("[" + (fresh[i].accountName || "Mail") + "] "
++                           + displaySender(fresh[i].sender) + ": " + fresh[i].subject);
+             body = lines.join("\n");
+         }
+         var icon = root._iconPath || "mail-unread";
+@@ -428,4 +502,4 @@ Singleton {
+         cmd.push(title, body);
+         Quickshell.execDetached(cmd);
+     }
+-}
++}
+\ No newline at end of file
