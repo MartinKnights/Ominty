@@ -1,0 +1,21 @@
+# matugen user configuration — Ominty aesthetics.
+#
+# Rendered by install.sh: __HOME__ is replaced with the real $HOME, because
+# matugen does not expand ~ or $HOME in config paths (they must be absolute).
+#
+# These templates are rendered by DMS on every wallpaper change (DMS merges the
+# user config with its own). They produce:
+#   - the popup palette read by the ominty-voice / ominty-tts Quickshell popups
+#   - the niri border + glow fragment included by ~/.config/niri/config.kdl
+
+[config]
+
+[templates]
+
+[templates.ominty_palette]
+input_path = '__HOME__/.config/matugen/templates/ominty-palette.json'
+output_path = '__HOME__/.config/ominty/theme/palette.json'
+
+[templates.ominty_niri]
+input_path = '__HOME__/.config/matugen/templates/ominty-niri.kdl'
+output_path = '__HOME__/.config/niri/dms/ominty-theme.kdl'

@@ -1,0 +1,20 @@
+{
+  "dark": {
+    "background": "{{colors.surface_container.dark.hex}}",
+    "on_background": "{{colors.on_surface.dark.hex}}",
+    "primary": "{{colors.primary.dark.hex}}",
+    "on_primary": "{{colors.on_primary.dark.hex}}",
+    "error": "{{colors.error.dark.hex}}",
+    "outline": "{{colors.outline_variant.dark.hex}}",
+    "surface_variant": "{{colors.surface_variant.dark.hex}}"
+  },
+  "light": {
+    "background": "{{colors.surface_container.light.hex}}",
+    "on_background": "{{colors.on_surface.light.hex}}",
+    "primary": "{{colors.primary.light.hex}}",
+    "on_primary": "{{colors.on_primary.light.hex}}",
+    "error": "{{colors.error.light.hex}}",
+    "outline": "{{colors.outline_variant.light.hex}}",
+    "surface_variant": "{{colors.surface_variant.light.hex}}"
+  }
+}

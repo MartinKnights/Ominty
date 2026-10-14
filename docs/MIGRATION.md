@@ -280,6 +280,30 @@ installer should run:
    The carousel replies `opened` to its IPC toggle; "working" means the picker
    appears, not that it auto-cycles.
 
+### Ominty aesthetics (matugen user templates)
+
+Beyond DMS's own theming, Ominty registers two **matugen user templates** that
+DMS renders on every wallpaper change (DMS merges `~/.config/matugen/config.toml`
+with its own config):
+
+| Template | Output | Consumed by |
+| --- | --- | --- |
+| `ominty-palette.json` | `~/.config/ominty/theme/palette.json` | the `ominty-voice` / `ominty-tts` Quickshell popups |
+| `ominty-niri.kdl` | `~/.config/niri/dms/ominty-theme.kdl` | `~/.config/niri/config.kdl` (included last) |
+
+`ominty-niri.kdl` carries the window border, an outer glow, and the open/close
+window animations (inline GLSL `custom-shader`). It is included **after** the
+DMS fragments so its `layout` / `border` / `shadow` win over them.
+
+matugen does **not** expand `~` or `$HOME` in config paths, so
+`~/.config/matugen/config.toml` is rendered by `install.sh` from
+`configs/matugen/config.toml.template` with `__HOME__` replaced. The templates
+themselves are path-independent and copied verbatim.
+
+Verify: change the wallpaper; `~/.config/ominty/theme/palette.json` and
+`~/.config/niri/dms/ominty-theme.kdl` must both update without a restart, and
+`journalctl --user -f` must show no `ShaderCompileError`.
+
 ---
 
 ## 9. Verifying the migration

@@ -264,3 +264,7 @@ include optional=true "dms/input.kdl"
 // Ominty generated bindings (registry → Niri fragment)
 include optional=true "~/.config/ominty/generated/niri/bindings.kdl"
 include "dms/windowrules.kdl"
+
+// Ominty aesthetics (matugen-generated: border + glow + window animations).
+// Included last so its layout/border/shadow win over the DMS fragments above.
+include "dms/ominty-theme.kdl" optional=true

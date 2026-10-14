@@ -310,6 +310,19 @@ else
     > ~/.config/DankMaterialShell/plugin_settings.json
 fi
 
+# matugen user templates (Ominty aesthetics: popup palette + niri border/glow).
+# matugen does not expand ~ or $HOME in config paths, so config.toml is rendered
+# from a template with __HOME__ replaced.
+run mkdir -p ~/.config/matugen/templates
+run cp "$REPO_DIR"/configs/matugen/templates/* ~/.config/matugen/templates/
+backup_existing ~/.config/matugen/config.toml
+if [ "$DRY_RUN" -eq 1 ]; then
+  plan "render $REPO_DIR/configs/matugen/config.toml.template -> ~/.config/matugen/config.toml (with __HOME__ replaced)"
+else
+  sed "s|__HOME__|$HOME|g" "$REPO_DIR/configs/matugen/config.toml.template" \
+    > ~/.config/matugen/config.toml
+fi
+
 # ominty (user configuration wins)
 for f in ai.toml apps.toml; do
   if [ ! -f ~/.config/ominty/$f ]; then
