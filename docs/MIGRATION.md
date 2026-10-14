@@ -348,6 +348,9 @@ session:
   live-apply path is a wallpaper change — regenerates the whole theme live
   (shell, Niri `dms/colors.kdl`, GTK/Qt, terminals, Firefox).  So applying an
   Aether theme changes the wallpaper **and** recolours the desktop.  Verified
-  live (bar `#3d4043` → `#0b1216`); logs to
+  live (bar `#3d4043` → `#0b1216`); an exact-hex-palette + `dms restart`
+  variant was tried and does **not** persist (DMS *dynamic* mode re-derives
+  from the wallpaper on start), confirming the wallpaper is the only
+  durable channel; logs to
   `~/.local/state/omi/aether-dms.log`.  Install: copy the custom app into
   `~/.config/aether/custom/` (see `configs/aether/README.md`).
