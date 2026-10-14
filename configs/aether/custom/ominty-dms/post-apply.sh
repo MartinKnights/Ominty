@@ -1,9 +1,11 @@
 #!/usr/bin/env bash
-# ominty-dms — seed the Ominty/DMS theme from Aether's chosen colour.
+# ominty-dms — apply Aether's theme to the whole Ominty/Niri/DMS desktop.
 #
-# Aether authors a palette; DMS + matugen render the whole desktop from it
-# (shell, Niri colours, GTK/Qt, terminals, Firefox…).  We feed DMS the
-# colour Aether wrote into the generated seed file.
+# Aether (standalone) generates files but applies nothing system-wide.  DMS
+# is our theme engine; its ONLY live-apply path is a wallpaper change
+# (`dms ipc call wallpaper set`), which regenerates the entire theme — shell,
+# Niri colours (dms/colors.kdl), GTK/Qt, terminals, Firefox — live.
+# So: take the wallpaper Aether just used and hand it to DMS.
 set -uo pipefail
 
 LOG="${XDG_STATE_HOME:-$HOME/.local/state}/omi/aether-dms.log"
@@ -11,28 +13,28 @@ mkdir -p "$(dirname "$LOG")"
 exec >>"$LOG" 2>&1
 echo "----- $(date '+%F %T') Aether apply -----"
 
-# Aether writes ~/.config/aether/theme/<app>-<template> and symlinks the
-# destination here; accept either.
-for f in "$HOME/.config/aether/theme/ominty-dms-seed.conf" \
-         "$HOME/.config/aether/ominty-dms-seed"; do
+# Aether writes ~/.config/aether/theme/ominty-dms-seed.conf (= {wallpaper})
+# and symlinks the destination; accept either, else newest background.
+paths=("$HOME/.config/aether/theme/ominty-dms-seed.conf" \
+       "$HOME/.config/aether/ominty-dms-seed")
+wp=""
+for f in "${paths[@]}"; do
     [ -f "$f" ] || continue
-    hex=$(grep -oE '#[0-9A-Fa-f]{6}' "$f" | head -1) && [ -n "$hex" ] && break
+    wp=$(head -n1 "$f" | tr -d '\r')
+    [ -n "$wp" ] && break
 done
-if [ -z "${hex:-}" ]; then
-    echo "no hex colour found in the seed file — nothing to do"
+if [ -z "$wp" ] || [ ! -f "$wp" ]; then
+    wp=$(ls -t "$HOME/.config/aether/theme/backgrounds/"* 2>/dev/null | head -1)
+fi
+if [ -z "$wp" ] || [ ! -f "$wp" ]; then
+    echo "no wallpaper from Aether — nothing to apply"
     exit 1
 fi
+echo "applying wallpaper: $wp"
 
-mode=$(dms ipc call theme getMode 2>/dev/null | tr -d '[:space:]')
-[ -n "$mode" ] || mode=dark
-echo "seeding DMS with $hex (mode=$mode)"
-
-dms matugen generate --kind hex --value "$hex" --mode "$mode" \
-    --state-dir "$HOME/.local/state/DankMaterialShell" \
-    --shell-dir /usr/share/quickshell/dms \
-    --config-dir "$HOME/.config/DankMaterialShell"
-echo "dms matugen exit=$?"
+dms ipc call wallpaper set "$wp"
+echo "wallpaper set exit=$?"
 
 if command -v notify-send >/dev/null 2>&1; then
-    notify-send -a Aether "Ominty theme applied" "Desktop colours seeded from $hex" 2>/dev/null || true
+    notify-send -a Aether "Ominty theme applied" "Desktop recoloured from $(basename "$wp")" 2>/dev/null || true
 fi

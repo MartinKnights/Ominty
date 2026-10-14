@@ -1,26 +1,30 @@
 # Aether integration (Ominty)
 
-Aether authors a colour palette from a wallpaper; these files make it drive
-the **whole Ominty/Niri/DMS desktop**.
+Aether authors a theme from a wallpaper; these files make **Apply Theme**
+change the whole Ominty/Niri/DMS desktop (wallpaper **and** colours).
 
 ## How it works
 
 ```
-Aether (pick / edit palette)  →  Apply Theme
-        │ writes ~/.config/aether/theme/ominty-dms-seed.conf  ({accent})
+Aether (pick / edit theme)  →  Apply Theme
+        │ writes ~/.config/aether/theme/ominty-dms-seed.conf  ({wallpaper})
         ▼
 custom/ominty-dms/post-apply.sh
         │
         ▼
-dms matugen generate --kind hex --value <accent> --mode <dark|light>
+dms ipc call wallpaper set "<aether wallpaper>"
         │
         ▼
-entire desktop palette: DMS shell · Niri colours (dms/colors.kdl) ·
-GTK/Qt · alacritty/ghostty · Firefox · zed · …
+DMS regenerates + applies the ENTIRE theme LIVE:
+DMS shell · Niri colours (dms/colors.kdl) · GTK/Qt · alacritty/ghostty ·
+Firefox · zed · …
 ```
 
-DMS is the renderer (unchanged); Aether becomes the palette author.  This is
-integration-over-duplication: no second theme engine.
+DMS is the theme engine (unchanged) and its **only live-apply path is a
+wallpaper change** — external `dms matugen generate/queue` writes files but
+the running shell does not repaint (verified).  So the hook hands Aether's
+wallpaper to DMS, which recolours everything live.  Integration over
+duplication: one theme engine, Aether as the authoring front-end.
 
 ## Install
 
@@ -30,17 +34,16 @@ cp -r configs/aether/custom/ominty-dms ~/.config/aether/custom/
 chmod +x ~/.config/aether/custom/ominty-dms/post-apply.sh
 ```
 
-Then in Aether: pick a wallpaper → **Apply Theme**.
+Then in Aether: choose a wallpaper → **Apply Theme**.
 
-## Tuning
+## Notes
 
-- **Seed colour** — `custom/ominty-dms/seed.conf` defaults to `{accent}`.
-  Choose any Aether variable, e.g. `{blue}`, `{background}`, `{color4}`.
-- **Scheme / spec / contrast** — add `--matugen-type`, `--spec`, `--contrast`
-  flags in `post-apply.sh` (see `dms matugen generate --help`).
-- Applying Aether is a deliberate theme set; a later DMS wallpaper change
-  re-derives the palette from that wallpaper.
-
-## Logs
-
-`~/.local/state/omi/aether-dms.log`
+- Applying Aether sets the **wallpaper too** (that is what triggers DMS's
+  live recolour).
+- The desktop palette is DMS's Material derivation of the chosen wallpaper
+  (the same source Aether extracts from).  Aether's per-colour slider edits
+  are **not** pushed to the live desktop — only the wallpaper is.  (Writing
+  an exact hex palette is possible via `dms matugen generate --kind hex
+  --value <hex>`, but the running shell only reflects it after a DMS
+  restart, so it isn't used here.)
+- Logs: `~/.local/state/omi/aether-dms.log`
