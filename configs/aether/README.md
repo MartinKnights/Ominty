@@ -42,8 +42,15 @@ Then in Aether: choose a wallpaper → **Apply Theme**.
   live recolour).
 - The desktop palette is DMS's Material derivation of the chosen wallpaper
   (the same source Aether extracts from).  Aether's per-colour slider edits
-  are **not** pushed to the live desktop — only the wallpaper is.  (Writing
-  an exact hex palette is possible via `dms matugen generate --kind hex
-  --value <hex>`, but the running shell only reflects it after a DMS
-  restart, so it isn't used here.)
+  are **not** pushed to the live desktop — only the wallpaper is.
+- **Why not push an exact hex palette?**  DMS runs in *dynamic* theme mode
+  (`currentThemeName = 'dynamic'`): it derives the palette from the current
+  wallpaper on every start.  `dms matugen generate --kind hex …` writes the
+  palette files, but (a) the running shell does not repaint, and (b) a
+  `dms restart` just re-derives from the wallpaper and discards it
+  (verified).  So the **wallpaper is the channel** — set it and DMS
+  recolours, live and durably.  Aether's *wallpaper* edits (blur/exposure/…)
+  therefore do flow through, since they change the image DMS derives from.
+- Exact static palettes would need a DMS *custom theme* (its Plugins &
+  Themes surface), which isn't file-drivable from here — out of scope.
 - Logs: `~/.local/state/omi/aether-dms.log`
