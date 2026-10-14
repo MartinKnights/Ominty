@@ -332,3 +332,15 @@ session:
   ```
 
   Safety snapshot before first use: `~/.config/niri.bak-ominty-20261008`.
+
+- **Aether** (`github.com/omacom/aether`) — wallpaper→theme generator with a
+  GUI (Go/Wails).  Installed 2026-10-10 from the official `.deb`
+  (`aether 4.32.0`, SHA-256 verified):
+  `sudo dpkg -i aether_4.32.0_amd64.deb && sudo apt-get install -f`.
+  Provides `/usr/bin/aether` + app-menu entry.  **Standalone mode** (not
+  Omarchy): it writes generated themes to `~/.config/aether/theme/` and does
+  not touch Niri/DMS/matugen.  CLI verified headlessly:
+  `aether --generate <wallpaper> --no-apply` → 16-colour palette + 23 theme
+  files (alacritty, kitty, ghostty, btop, neovim, vscode, hyprland, zed…).
+  Its native templates do not cover Niri/DMS; wiring it into our desktop
+  would be a custom-template step (later).
