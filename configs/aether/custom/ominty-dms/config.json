@@ -1,0 +1,4 @@
+{
+    "template": "seed.conf",
+    "destination": "~/.config/aether/ominty-dms-seed"
+}

@@ -342,5 +342,11 @@ session:
   not touch Niri/DMS/matugen.  CLI verified headlessly:
   `aether --generate <wallpaper> --no-apply` → 16-colour palette + 23 theme
   files (alacritty, kitty, ghostty, btop, neovim, vscode, hyprland, zed…).
-  Its native templates do not cover Niri/DMS; wiring it into our desktop
-  would be a custom-template step (later).
+  Its native templates do not cover Niri/DMS, so **integrated** via a custom
+  app (`configs/aether/custom/ominty-dms/`): on **Apply Theme** it seeds the
+  whole desktop palette with `dms matugen generate --kind hex --value
+  <accent>` — DMS (unchanged) then renders the shell, Niri colours
+  (`dms/colors.kdl`), GTK/Qt, terminals and Firefox from Aether's colour.
+  Verified: seed `#7aa2f7` → Niri `#aec6ff`; logs to
+  `~/.local/state/omi/aether-dms.log`.  Install: copy the custom app into
+  `~/.config/aether/custom/` (see `configs/aether/README.md`).
