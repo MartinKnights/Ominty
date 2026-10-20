@@ -120,14 +120,22 @@ PluginComponent {
         promptText = ""
         busyChat = true
     }
+    function svcLabel(action) {
+        return {
+            start: "starting", stop: "stopping", restart: "restarting",
+            enable: "enabling auto-start", disable: "disabling auto-start"
+        }[action] || action
+    }
     function svc(action) {
         dbg("svc: " + action)
-        // Close the panel first: it holds an exclusive keyboard layer that
-        // would cover the polkit auth dialog pkexec is about to raise. The
-        // helper keeps running (svcProc is daemon-level); a desktop
-        // notification reports the outcome.
-        if (panelVisible) closePanel()
+        // System-scope actions run through pkexec: this panel holds an
+        // exclusive keyboard layer that would cover the polkit dialog, so
+        // close it and report the outcome as a toast. User-scope actions
+        // need no privileges — keep the panel open and give inline
+        // feedback (say()/busy state), the toast flow is for the closed case.
+        if (panelVisible && root.status.scope === "system") closePanel()
         busySvc = true
+        say("Ollama service: " + svcLabel(action) + " (" + (root.status.scope || "?") + " unit)…")
         run(svcProc, [root._b, root._p, "svc", action])
     }
     function gpuCheck() {
@@ -285,10 +293,25 @@ PluginComponent {
             onStreamFinished: {
                 root.busySvc = false
                 var d = JSON.parse(root.popLastJson(text))
-                if (d.err) root.notify(d.action, d.err, true)
-                else {
-                    var msg = "Ollama service '" + d.action + "' done. Open the manager (Super+Shift+O) to see the new state."
-                    root.notify(d.action, msg, false)
+                var label = root.svcLabel(d.action || "")
+                if (d.err) {
+                    if (root.panelVisible)
+                        root.say("Service " + label + " failed: " + d.err, true)
+                    else
+                        root.notify("service " + label + " failed", d.err, true)
+                } else {
+                    // human word for the service result
+                    var word = { start: "started", stop: "stopped",
+                                 restart: "restarted", enable: "auto-start enabled",
+                                 disable: "auto-start disabled" }[d.action]
+                    if (root.panelVisible) {
+                        if (d.action === "enable" || d.action === "disable")
+                            root.say("Ollama " + word + " (" + d.scope + " unit).")
+                        else
+                            root.say("Ollama " + word + " (" + d.scope + " unit) — server state refreshes in a moment.")
+                    } else {
+                        root.notify(word, "Ollama " + word + ". Open the manager (Super+Shift+O) for the new state.", false)
+                    }
                 }
                 root.refresh()
             }
