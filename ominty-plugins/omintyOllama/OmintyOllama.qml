@@ -38,6 +38,18 @@ PluginComponent {
     property string detailsModel: ""
     property string chatModel: ""
     property string chatLog: ""
+    property string chatPhase: ""      // "" | loading | inMemory
+    property int chatElapsed: 0
+    readonly property string chatStatus: {
+        if (chatPhase === "inMemory") return "in memory — generating answer… · " + chatElapsed + "s"
+        if (chatPhase === "loading") {
+            var size = ""
+            for (var i = 0; i < models.length; i++)
+                if (models[i].name === chatModel) { size = models[i].size_text; break }
+            return "loading" + (size !== "" ? " (" + size + ")" : "") + " — first load can take minutes… · " + chatElapsed + "s"
+        }
+        return ""
+    }
     property string promptText: ""
 
     property bool pulling: false
@@ -119,6 +131,8 @@ PluginComponent {
         run(chatProc, [root._b, root._p, "chat", chatModel, promptText.trim()])
         promptText = ""
         busyChat = true
+        chatPhase = "loading"
+        chatElapsed = 0
     }
     function svcLabel(action) {
         return {
@@ -261,6 +275,7 @@ PluginComponent {
         id: chatProc
         stdout: StdioCollector {
             onStreamFinished: {
+                root.chatPhase = ""
                 root.busyChat = false
                 var d = JSON.parse(root.popLastJson(text))
                 if (d.err) root.chatLog += "\n— " + d.err
@@ -268,6 +283,41 @@ PluginComponent {
             }
         }
         onExited: root.busyChat = false
+    }
+
+    // chat load feedback: elapsed ticker + periodic ollama-ps probe, so the
+    // user sees "loading (14 GB) — first load can take minutes" until the
+    // model really shows up in memory, then "in memory — generating…"
+    Timer {
+        id: chatTick
+        interval: 1000
+        running: root.busyChat
+        repeat: true
+        onTriggered: root.chatElapsed += 1
+    }
+    Timer {
+        id: chatPollTimer
+        interval: 3000
+        running: root.busyChat
+        repeat: true
+        onTriggered: root.run(root.psProc, [root._b, root._p, "ps"])
+    }
+    Process {
+        id: psProc
+        stdout: StdioCollector {
+            onStreamFinished: {
+                if (!root.busyChat) return
+                var d = JSON.parse(root.popLastJson(text))
+                var base = root.chatModel.split(":")[0]
+                if (!d.running || !d.running.length) return
+                for (var i = 0; i < d.running.length; i++) {
+                    if (d.running[i].name.split(":")[0] === base) {
+                        root.chatPhase = "inMemory"
+                        return
+                    }
+                }
+            }
+        }
     }
 
     Process {
@@ -661,6 +711,29 @@ PluginComponent {
                                 text: "Chat — " + root.chatModel
                                 color: Theme.surfaceText
                                 font.weight: Font.Bold
+                                elide: Text.ElideMiddle
+                                Layout.fillWidth: true
+                            }
+                        }
+                        // busy spinner line — "no feedback" fix: shows the
+                        // load phase + elapsed seconds while the model loads
+                        RowLayout {
+                            Layout.fillWidth: true
+                            spacing: Theme.spacingS
+                            visible: root.busyChat
+                            Rectangle {
+                                width: 10; height: 10; radius: 5
+                                color: root.chatPhase === "inMemory" ? "#a6e3a1" : "#f9e2af"
+                                SequentialAnimation on opacity {
+                                    running: root.busyChat
+                                    loops: Animation.Infinite
+                                    NumberAnimation { from: 0.25; to: 1.0; duration: 700 }
+                                    NumberAnimation { from: 1.0; to: 0.25; duration: 700 }
+                                }
+                            }
+                            StyledText {
+                                text: root.busyChat ? root.chatStatus : ""
+                                color: Theme.surfaceVariantText
                                 elide: Text.ElideMiddle
                                 Layout.fillWidth: true
                             }

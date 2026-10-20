@@ -32,7 +32,7 @@ omintyOllama/
 The QML holds no logic; every operation goes through the Python helper
 (same pattern as `omintyDownload/helpers/ominty-dl.py`). Helper commands:
 
-`status | list | show <m> | pull <m> | rm <m> | chat <m> <prompt> | gpu |
+`status | list | ps | show <m> | pull <m> | rm <m> | chat <m> <prompt> | gpu |
 svc <start|stop|restart|enable|disable> | backup | backups | restore <archive>`
 
 Progress while pulling/backing up/restoring is streamed as one JSON object per

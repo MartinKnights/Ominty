@@ -332,6 +332,30 @@ def cmd_rm(args: list | None = None) -> None:
         out({"ok": True})
 
 
+def cmd_ps(args: list | None = None) -> None:
+    """Models currently loaded into memory (ollama ps) — chat load feedback."""
+    port, up = server_up()
+    if not up:
+        out({"ok": True, "serverUp": False, "running": []})
+        return
+    proc = run_ollama(["ps", "--json"], timeout=10)
+    rows = []
+    if proc.returncode == 0:
+        try:
+            rows = json.loads(proc.stdout or "[]") or []
+        except Exception:
+            rows = []
+    else:
+        log(f"ps failed: {proc.stderr.strip()[:120]}")
+    out({"ok": True, "serverUp": up, "running": [
+        {"name": r.get("name", ""),
+         "processor": r.get("processor", ""),
+         "vramPct": int(round(float(r.get("size_vram", 0)) * 100
+                             / float(r.get("size", 1))))
+         if float(r.get("size", 0)) > 0 else 0,
+         } for r in rows]})
+
+
 def cmd_chat(args: list | None = None) -> None:
     prompt = None
     if args and len(args) >= 2:
@@ -500,6 +524,7 @@ def _dispatch(args: list, count: int, what: str) -> str:
 COMMANDS = {
     "status": cmd_status,
     "list": cmd_list,
+    "ps": cmd_ps,
     "gpu": cmd_gpu,
     "backup": cmd_backup,
     "backups": cmd_backups,
@@ -514,7 +539,7 @@ COMMANDS = {
 
 def main() -> None:
     if len(sys.argv) < 2 or sys.argv[1] not in COMMANDS:
-        out({"err": "usage: ominty-ollama.py <status|list|show|pull|rm|chat|gpu|svc|backup|backups|restore> [args]"})
+        out({"err": "usage: ominty-ollama.py <status|list|ps|show|pull|rm|chat|gpu|svc|backup|backups|restore> [args]"})
         sys.exit(2)
     try:
         COMMANDS[sys.argv[1]](sys.argv[2:])
