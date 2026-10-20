@@ -16,6 +16,7 @@ dms ipc call plugins enable <id>
 |---|---|---|
 | `omintyReader` | github.com/ClumZeez/omarchy-reader | pilot — overlay/daemon done, bar widget follow-up |
 | `omintyDownload` | github.com/wicky14/omarchy-download-manager | tracked |
+| `omintyOllama` | `~/Scripts/Bash/ollama_control_center.sh` (Zenity | **native** — daemon + overlay; Models/Server/Backup, chat, pull, GPU check, backup/restore) |
 | ai-usage / BF-Agent-Ledger / opencode-go | agent-usage widgets | tracked — needs an Ominty agents data layer |
 
 See the skill for the full process and pitfalls (manifest conversion,
