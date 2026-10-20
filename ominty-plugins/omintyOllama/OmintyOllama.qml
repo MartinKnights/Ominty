@@ -308,19 +308,11 @@ PluginComponent {
     }
 
     // ------------------------------------------------------------ overlay
-    // No click-outside-to-close on the dim (DMS ghost-click bug): close via
-    // Esc / × only, same as omintyDownload.
-    PanelWindow {
-        id: dimWindow
-        visible: root.panelVisible
-        color: "transparent"
-        WlrLayershell.namespace: "ominty:ollama-dim"
-        WlrLayershell.layer: WlrLayershell.Overlay
-        WlrLayershell.exclusiveZone: -1
-        anchors { top: true; bottom: true; left: true; right: true }
-        Rectangle { anchors.fill: parent; color: Qt.rgba(0, 0, 0, 0.55) }
-    }
-
+    // ONE single layer window containing dim + centred sheet: two sibling
+    // Overlay-layer surfaces (dim + panel) mapped in the same commit stack
+    // in an arbitrary order in niri, and if the dim lands on top it eats
+    // every click on the output (observed). Single window = no race. No
+    // click-outside-to-close (DMS ghost-click bug): close via Esc / × only.
     PanelWindow {
         id: overlay
         visible: root.panelVisible
@@ -329,17 +321,19 @@ PluginComponent {
         WlrLayershell.layer: WlrLayershell.Overlay
         WlrLayershell.exclusiveZone: -1
         WlrLayershell.keyboardFocus: WlrKeyboardFocus.Exclusive
-
-        readonly property int pw: Math.min(760, (overlay.screen ? overlay.screen.width : 1920) - 80)
-        readonly property int ph: Math.min(680, (overlay.screen ? overlay.screen.height : 1080) - 80)
-        readonly property int mh: Math.max(0, Math.round(((overlay.screen ? overlay.screen.width : 1920) - pw) / 2))
-        readonly property int mv: Math.max(0, Math.round(((overlay.screen ? overlay.screen.height : 1080) - ph) / 2))
         anchors { top: true; bottom: true; left: true; right: true }
-        margins { left: overlay.mh; right: overlay.mh; top: overlay.mv; bottom: overlay.mv }
+
+        Rectangle {
+            anchors.fill: parent
+            color: Qt.rgba(0, 0, 0, 0.55)
+            // no MouseArea here: the dim intentionally ignores clicks
+        }
 
         Rectangle {
             id: sheet
-            anchors.fill: parent
+            anchors.centerIn: parent
+            width: Math.min(760, (overlay.screen ? overlay.screen.width : 1920) - 80)
+            height: Math.min(680, (overlay.screen ? overlay.screen.height : 1080) - 80)
             radius: 12
             color: Theme.withAlpha(Theme.surface, 0.92)
             focus: true
