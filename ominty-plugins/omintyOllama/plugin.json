@@ -1,0 +1,21 @@
+{
+  "$schema": "https://github.com/AvengeMedia/DankMaterialShell/raw/refs/heads/master/PLUGINS/plugin-schema.json",
+  "id": "omintyOllama",
+  "name": "Ollama Manager",
+  "description": "Manage the local Ollama installation from the DankBar: status, pull/remove models with live progress, details, quick chat, systemd server control, GPU check and backups. Built natively on DMS.",
+  "version": "0.1.0",
+  "icon": "ai",
+  "type": "daemon",
+  "capabilities": [
+    "daemon"
+  ],
+  "components": {
+    "daemon": "./OmintyOllama.qml"
+  },
+  "requires_dms": ">=1.6.0",
+  "permissions": [
+    "process",
+    "settings_read",
+    "settings_write"
+  ]
+}
