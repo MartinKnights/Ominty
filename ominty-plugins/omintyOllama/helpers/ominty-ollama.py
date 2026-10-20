@@ -325,7 +325,7 @@ def cmd_svc(action: str) -> None:
         return
     log(f"Service action '{action}': pkexec {' '.join(cmd)}")
     try:
-        proc = run(["pkexec"] + cmd, timeout=60)
+        proc = run(["pkexec"] + cmd, timeout=300)
     except FileNotFoundError:
         out({"err": "pkexec not found on this system."})
         return

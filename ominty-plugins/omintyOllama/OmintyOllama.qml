@@ -59,6 +59,16 @@ PluginComponent {
         notice = msg
         noticeErr = err === true
     }
+    function notify(title, body, err) {
+        // visible even with the panel closed (svc flow closed it)
+        notifProc.running = false
+        notifCmd = ["/usr/bin/notify-send", "-a", "Ollama Manager",
+                    (err ? "-u" : "-t"), (err ? "critical" : "normal"),
+                    "Ollama Manager — " + title, body]
+        notifProc.command = notifCmd
+        notifProc.running = true
+        say(body, err)
+    }
 
     // --------------------------------------------------------------- panel
     function toggle() { if (panelVisible) closePanel(); else openPanel() }
@@ -111,8 +121,12 @@ PluginComponent {
     }
     function svc(action) {
         dbg("svc: " + action)
+        // Close the panel first: it holds an exclusive keyboard layer that
+        // would cover the polkit auth dialog pkexec is about to raise. The
+        // helper keeps running (svcProc is daemon-level); a desktop
+        // notification reports the outcome.
+        if (panelVisible) closePanel()
         busySvc = true
-        say("Running " + action + " — an authentication prompt may appear…")
         run(svcProc, [root._b, root._p, "svc", action])
     }
     function gpuCheck() {
@@ -152,6 +166,14 @@ PluginComponent {
     }
 
     // ----------------------------------------------------------- backend
+    property var notifCmd: []
+
+    Process {
+        id: notifProc
+        running: false
+        command: notifCmd
+    }
+
     Timer {
         id: refreshTimer
         interval: 4000
@@ -262,8 +284,11 @@ PluginComponent {
             onStreamFinished: {
                 root.busySvc = false
                 var d = JSON.parse(root.popLastJson(text))
-                if (d.err) root.say(d.err, true)
-                else root.say("Server " + d.action + " done")
+                if (d.err) root.notify(d.action, d.err, true)
+                else {
+                    var msg = "Ollama service '" + d.action + "' done. Open the manager (Super+Shift+O) to see the new state."
+                    root.notify(d.action, msg, false)
+                }
                 root.refresh()
             }
         }
