@@ -13,8 +13,9 @@ import qs.Modules.Plugins
 // Manages the local Ollama installation through the helpers/ominty-ollama.py
 // contract (QML holds no logic, same pattern as omintyDownload): status,
 // list/pull/remove models with live pull progress, model details, quick chat,
-// systemd server control (pkexec → DMS polkit dialog), GPU check and
-// backup/restore of the models directory.
+// systemd server control (user unit preferred; system unit falls back to
+// pkexec → DMS polkit dialog), GPU check and backup/restore of the models
+// directory.
 //
 // Interaction: IPC (or palette action omintyOllama toggle) opens the overlay;
 // three tabs — Models / Server / Backup; Esc closes.
@@ -789,7 +790,7 @@ PluginComponent {
                         }
                         StyledText {
                             Layout.fillWidth: true
-                            text: "Start/stop/restart/enable/disable run through pkexec — DMS shows an authentication prompt when needed."
+                            text: "Started via your " + (root.status.scope === "user" ? "user" : "system") + " systemd unit — start/stop needs no administrator rights on user units; system units show an authentication prompt."
                             color: Theme.surfaceVariantText
                             font.pixelSize: 11
                             wrapMode: Text.WordWrap
