@@ -62,7 +62,13 @@ PluginComponent {
 
     // --------------------------------------------------------------- panel
     function toggle() { if (panelVisible) closePanel(); else openPanel() }
-    function openPanel() { panelVisible = true; refresh(); refreshBackups(); refreshTimer.start() }
+    function openPanel() {
+        panelVisible = true
+        say("")
+        refresh()
+        refreshBackups()
+        refreshTimer.start()
+    }
     function closePanel() { panelVisible = false; refreshTimer.stop() }
 
     function refresh() {
@@ -77,19 +83,23 @@ PluginComponent {
         if (m === "") { say("Enter a model name to pull", true); return }
         pullField.text = ""
         pulling = true; pullModel = m; pullPct = 0; pullLine = "Contacting registry…"
+        dbg("pull: " + m)
         pullProc.running = false
         pullProc.command = [root._b, root._p, "pull", m]
         pullProc.running = true
     }
     function removeModel(name) {
+        dbg("remove: " + name)
         run(rmProc, [root._b, root._p, "rm", name])
     }
     function openDetails(name) {
+        dbg("details: " + name)
         detailsModel = name; subview = "details"; detailsText = "Loading…"
         run(showProc, [root._b, root._p, "show", name])
     }
     function openChat(name) {
-        chatModel = name; subview = "chat"; chatLog = ""
+        dbg("chat: " + name)
+        chatModel = name; subview = "chat"; chatLog = "Starting " + name + "…\n\n"
         promptField.focus = true
     }
     function sendChat() {
@@ -99,10 +109,28 @@ PluginComponent {
         promptText = ""
         busyChat = true
     }
-    function svc(action) { busySvc = true; run(svcProc, [root._b, root._p, "svc", action]) }
-    function gpuCheck() { busyGpu = true; say(""); run(gpuProc, [root._b, root._p, "gpu"]) }
-    function backupNow() { busyBackup = true; run(backupProc, [root._b, root._p, "backup"]) }
-    function restore(name) { busyBackup = true; run(restoreProc, [root._b, root._p, "restore", name]) }
+    function svc(action) {
+        dbg("svc: " + action)
+        busySvc = true
+        say("Running " + action + " — an authentication prompt may appear…")
+        run(svcProc, [root._b, root._p, "svc", action])
+    }
+    function gpuCheck() {
+        dbg("gpu check")
+        busyGpu = true; say("GPU check: loading the smallest model…")
+        run(gpuProc, [root._b, root._p, "gpu"])
+    }
+    function backupNow() {
+        dbg("backup now")
+        busyBackup = true
+        say("Creating backup…")
+        run(backupProc, [root._b, root._p, "backup"])
+    }
+    function restore(name) {
+        dbg("restore: " + name)
+        busyBackup = true
+        run(restoreProc, [root._b, root._p, "restore", name])
+    }
 
     function popLastJson(t) {
         var lines = String(t).trim().split("\n")
@@ -213,6 +241,7 @@ PluginComponent {
 
     Process {
         id: gpuProc
+        onExited: root.busyGpu = false
         stdout: StdioCollector {
             onStreamFinished: {
                 root.busyGpu = false
@@ -228,6 +257,7 @@ PluginComponent {
 
     Process {
         id: svcProc
+        onExited: root.busySvc = false
         stdout: StdioCollector {
             onStreamFinished: {
                 root.busySvc = false
@@ -241,6 +271,7 @@ PluginComponent {
 
     Process {
         id: backupProc
+        onExited: root.busyBackup = false
         stdout: StdioCollector {
             onStreamFinished: {
                 root.busyBackup = false
@@ -253,6 +284,7 @@ PluginComponent {
 
     Process {
         id: restoreProc
+        onExited: root.busyBackup = false
         stdout: StdioCollector {
             onStreamFinished: {
                 root.busyBackup = false
@@ -372,7 +404,7 @@ PluginComponent {
                             width: 96; height: 30; radius: 6
                             color: root.view === modelData.id ? Theme.primary : Theme.withAlpha(Theme.surfaceVariant, 0.3)
                             StyledText { anchors.centerIn: parent; text: modelData.label; color: root.view === modelData.id ? "black" : Theme.surfaceText }
-                            MouseArea { anchors.fill: parent; onClicked: { root.view = modelData.id; root.subview = "" } }
+                            MouseArea { anchors.fill: parent; onClicked: { dbg("tab: " + modelData.id); root.view = modelData.id; root.subview = "" } }
                         }
                     }
                     Item { Layout.fillWidth: true }
