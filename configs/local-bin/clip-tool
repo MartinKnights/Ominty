@@ -1,0 +1,73 @@
+#!/usr/bin/env bash
+# clip-tool — session-aware clipboard access for X11 and Wayland.
+#
+# Cinnamon runs on X11 and Niri runs on Wayland, so clipboard access needs a
+# different tool per session:
+#   Wayland -> wl-copy / wl-paste  (wl-clipboard)
+#   X11     -> xclip, else xsel    (X11 selections)
+#
+# Callers use this so one script works unchanged in either session.
+#
+# Usage:
+#   clip-tool copy           stdin         -> clipboard
+#   clip-tool paste          clipboard     -> stdout
+#   clip-tool primary-copy   stdin         -> PRIMARY selection
+#   clip-tool primary-paste  PRIMARY       -> stdout
+#
+# Under Wayland the PRIMARY selection is rarely populated, so primary-paste
+# falls back to the regular clipboard. Without that fallback, read-selection
+# returns nothing in Niri.
+
+set -uo pipefail
+
+die() { printf 'clip-tool: %s\n' "$1" >&2; exit 1; }
+have() { command -v "$1" >/dev/null 2>&1; }
+
+# Prefer the Wayland path only when we actually have a Wayland session and
+# wl-clipboard is installed. Under X11 (Cinnamon) we must not use it.
+use_wayland() { [ -n "${WAYLAND_DISPLAY:-}" ] && have wl-copy && have wl-paste; }
+
+cmd="${1:-}"
+[ -n "$cmd" ] || die "usage: clip-tool copy|paste|primary-copy|primary-paste"
+
+case "$cmd" in
+  copy | paste | primary-copy | primary-paste) ;;
+  *) die "unknown command: '$cmd'" ;;
+esac
+
+primary=0
+copying=0
+case "$cmd" in
+  primary-copy | primary-paste) primary=1 ;;
+esac
+case "$cmd" in
+  copy | primary-copy) copying=1 ;;
+esac
+
+# ---- Wayland (Niri) ----
+if use_wayland; then
+  if [ "$copying" -eq 1 ]; then
+    if [ "$primary" -eq 1 ]; then exec wl-copy --primary; fi
+    exec wl-copy
+  fi
+  if [ "$primary" -eq 1 ]; then
+    out="$(wl-paste --primary 2>/dev/null || true)"
+    if [ -n "$out" ]; then printf '%s' "$out"; exit 0; fi
+  fi
+  exec wl-paste --no-newline
+fi
+
+# ---- X11 (Cinnamon) ----
+if have xclip; then
+  if [ "$primary" -eq 1 ]; then sel=(-selection primary); else sel=(-selection clipboard); fi
+  if [ "$copying" -eq 1 ]; then exec xclip "${sel[@]}" -i; fi
+  exec xclip "${sel[@]}" -o
+fi
+
+if have xsel; then
+  if [ "$primary" -eq 1 ]; then sel=(--primary); else sel=(--clipboard); fi
+  if [ "$copying" -eq 1 ]; then exec xsel -i "${sel[@]}"; fi
+  exec xsel -o "${sel[@]}"
+fi
+
+die "no clipboard tool found (install wl-clipboard, xclip or xsel)"

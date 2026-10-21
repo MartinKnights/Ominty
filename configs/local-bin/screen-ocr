@@ -1,0 +1,75 @@
+#!/bin/bash
+
+# screen-ocr: Select screen area → OCR → clipboard
+# Keyboard shortcut: Ctrl+Alt+R
+
+set -e
+
+# clip-tool selects wl-copy under Wayland (Niri) and xclip/xsel under X11
+# (Cinnamon), so this works unchanged in either session.
+CLIP_TOOL="$HOME/.local/bin/clip-tool"
+
+TMPDIR="${TMPDIR:-/tmp}"
+TIMESTAMP=$(date +%s)
+SCREENSHOT="$TMPDIR/screen-ocr-$TIMESTAMP.png"
+CLEANUP="$TMPDIR/screen-ocr-$TIMESTAMP.txt"
+
+# Clean up temp files on exit
+cleanup() {
+  rm -f "$SCREENSHOT" "$CLEANUP"
+}
+trap cleanup EXIT
+
+# 1. Take an area screenshot (interactive crosshair)
+#    X11 (Cinnamon) uses gnome-screenshot; Wayland (Niri) uses grim + slurp.
+notify-send -t 1500 "Screen OCR" "Select an area to OCR..."
+
+if [ -n "${WAYLAND_DISPLAY:-}" ]; then
+  if ! command -v slurp >/dev/null 2>&1; then
+    notify-send -u critical "Screen OCR" \
+      "slurp is required for Wayland area select (apt install slurp)"
+    exit 1
+  fi
+  geometry="$(slurp 2>/dev/null || true)"
+  if [ -z "$geometry" ]; then
+    notify-send "Screen OCR" "Cancelled — no area selected"
+    exit 1
+  fi
+  if ! grim -g "$geometry" "$SCREENSHOT" 2>/dev/null; then
+    notify-send -u critical "Screen OCR" "Screenshot failed"
+    exit 1
+  fi
+else
+  if ! gnome-screenshot -a -f "$SCREENSHOT" 2>/dev/null; then
+    notify-send -u critical "Screen OCR" "Screenshot cancelled or failed"
+    exit 1
+  fi
+fi
+
+# Check if screenshot was actually taken (user might have pressed Escape)
+if [ ! -s "$SCREENSHOT" ]; then
+  notify-send "Screen OCR" "Cancelled — no area selected"
+  exit 1
+fi
+
+# 2. Run OCR
+tesseract "$SCREENSHOT" "$TMPDIR/screen-ocr-$TIMESTAMP" 2>/dev/null
+
+# 3. Read OCR result
+TEXT=$(cat "$CLEANUP" 2>/dev/null | sed '/^$/d')
+
+if [ -z "$TEXT" ]; then
+  notify-send -u critical "Screen OCR" "No text found in selection"
+  exit 1
+fi
+
+# 4. Copy to clipboard
+echo -n "$TEXT" | "$CLIP_TOOL" copy
+
+# Show preview in notification
+LINE_COUNT=$(echo "$TEXT" | wc -l)
+CHAR_COUNT=$(echo -n "$TEXT" | wc -c)
+PREVIEW=$(echo "$TEXT" | head -3)
+notify-send -t 3000 "Screen OCR" "${PREVIEW}${LINE_COUNT:+
+— ${LINE_COUNT} lines, ${CHAR_COUNT} chars —}
+Copied to clipboard"

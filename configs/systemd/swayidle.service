@@ -1,0 +1,25 @@
+[Unit]
+Description=swayidle - lock the Niri/DMS session before suspend/wake
+Documentation=man:swayidle(1) man:swaylock(1)
+PartOf=graphical-session.target
+After=graphical-session.target
+
+[Service]
+Type=simple
+# libseat asks logind for the graphical session, so WAYLAND_DISPLAY is not
+# needed here. XDG_SESSION_TYPE is set defensively in case the user manager
+# was started outside the session (e.g. from a TTY).
+Environment=XDG_SESSION_TYPE=wayland
+# -w: serialize the commands so a manual lock plus a suspend event cannot
+# spawn two competing swaylock processes.
+ExecStart=/usr/bin/swayidle -w resume swaylock before-sleep swaylock
+Restart=on-failure
+RestartSec=2
+
+# swayidle sleeps 900s per cycle; do not let systemd consider it a hang.
+TimeoutStartSec=infinity
+TimeoutStopSec=10
+KillSignal=SIGTERM
+
+[Install]
+WantedBy=graphical-session.target

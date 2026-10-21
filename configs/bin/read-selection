@@ -1,0 +1,56 @@
+#!/bin/bash
+# Read selected text aloud using Piper TTS
+# Strips common markdown formatting before sending to TTS
+
+QUEUE_FILE="/tmp/piper_queue.txt"
+
+# clip-tool selects wl-paste under Wayland (Niri) and xclip/xsel under X11
+# (Cinnamon), so this works unchanged in either session.
+CLIP_TOOL="$HOME/.local/bin/clip-tool"
+
+TEXT=$("$CLIP_TOOL" primary-paste 2>/dev/null || true)
+
+if [ -z "$TEXT" ]; then
+    exit 1
+fi
+
+# Strip markdown formatting before TTS
+CLEAN_TEXT=$(echo "$TEXT" | perl -0777 -pe '
+  # Remove code blocks (triple backticks)
+  s/```.*?```//gs;
+  # Remove inline code
+  s/`([^`]+)`/$1/g;
+  # Strip bold **text** → text
+  s/\*\*([^*]+)\*\*/$1/g;
+  # Strip bold __text__ → text
+  s/__([^_]+)__/$1/g;
+  # Strip italic *text* → text (but not asterisks around spaces)
+  s/(?<!\*)\*(\S[^*]*\S)\*(?!\*)/$1/g;
+  # Strip italic _text_ → text (word-boundary aware)
+  s/(?<=\s|^)_(\S[^_]*\S)_(?=\s|$)/$1/g;
+  # Strip strikethrough ~~text~~ → text
+  s/~~([^~]+)~~/$1/g;
+  # Strip images ![alt](url) → alt
+  s/!\[([^\]]*)\]\([^)]*\)/$1/g;
+  # Strip links [text](url) → text
+  s/\[([^\]]*)\]\([^)]*\)/$1/g;
+  # Strip header markers (# Header → Header)
+  s/^#{1,6}\s+//gm;
+  # Strip horizontal rules (---, ***, ___)
+  s/^[-*_]{3,}\s*$//gm;
+  # Strip blockquote markers (> text → text)
+  s/^>\s+//gm;
+  # Strip unordered list markers (-, *, +)
+  s/^[\t ]*[-*+]\s+//gm;
+  # Strip ordered list markers (1. 2. etc.)
+  s/^[\t ]*\d+\.\s+//gm;
+')
+
+if [ -z "$CLEAN_TEXT" ]; then
+    # If stripping emptied it, use original
+    CLEAN_TEXT="$TEXT"
+fi
+
+echo "$CLEAN_TEXT" > "$QUEUE_FILE"
+
+exit 0

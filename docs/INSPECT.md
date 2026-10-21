@@ -69,17 +69,21 @@ only, so it is safe to use in scripts.
 `is_lmde` is true only for `mint-debian`. Ubuntu-based Mint has `ubuntu` in
 `ID_LIKE` *and* `debian`, so testing for `debian` alone would misclassify it.
 
-`desktop_source` says how DMS got onto the machine: `obs` (Debian/LMDE
-package), `ppa` (Ubuntu Launchpad PPA), `source` (built into `~/.local`), or
-`none`. The installer uses it to decide whether it may replace `dms.service`
-or must leave the packaged unit alone and use a drop-in.
+`desktop_source` says how DMS got onto the machine: `source` (built from the
+pinned commit into `~/.local` — the current installer path on **both**
+families), `obs` or `ppa` (a package from the AvengeMedia OBS / Launchpad,
+i.e. an install made before the source build), or `none`. The installer owns
+`~/.config/systemd/user/dms.service` on both families, so a source build and a
+legacy package can coexist without fighting over the unit.
 
 `support_level` is one of `supported`, `validated`, `unvalidated` or
 `unsupported`; `supported` is the boolean shortcut.
 
-- Debian-family hosts are validated when `codename` is `trixie`, `faye` or
-  `gigi` (`gigi` is Debian 13's codename, which some LMDE 7 images report
-  instead of LMDE's own `faye`).
+- Debian-family hosts are validated when `codename` is `trixie` (Debian 13) or
+  `gigi` (LMDE 7, which reports its own release codename). `faye` is **not**
+  covered: it is LMDE 6, based on Debian 12, which has no
+  `trixie-backports`. Debian 12 hosts therefore get a **blocking** finding
+  rather than a warning, because the install cannot succeed.
 - Ubuntu-family hosts are supported through the **source-build** path when
   their Ubuntu base (`ubuntu_codename`, falling back to `codename` for Ubuntu
   itself) is `noble`. Other Ubuntu bases warn as unvalidated.
@@ -128,6 +132,10 @@ or must leave the packaged unit alone and use a drop-in.
 | `apt` | In the Debian/Ubuntu archive. |
 | `obs` | From the AvengeMedia Open Build Service. Needs `install.sh` to add the sources. |
 | `local` | A `.deb` bundled in `packages/`. |
+
+A package that is absent from `dpkg` but present on `PATH` (in `~/.local/bin`)
+is reported with `"source": "build"` and a `source-built (<path>)` detail —
+that is how the pinned DMS build shows up on both families.
 
 `provisioned` says whether `install.sh` installs the layer today. A layer with
 `provisioned: false` reports a **warning**, never a blocking finding — do not

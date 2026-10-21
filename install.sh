@@ -5,9 +5,13 @@
 # Installs the layers declared in the ominty-core manifest (see
 # `ominty layers`): the Niri + DankMaterialShell desktop, terminal and shell,
 # editor, CLI tooling, containers and browser. Also installs Niri from a
-# bundled .deb, Quickshell from Debian trixie-backports, DMS/matugen/ghostty
-# from the AvengeMedia Open Build Service, and deploys the Ominty
-# configuration.
+# bundled .deb, Quickshell from Debian trixie-backports (or source on Ubuntu),
+# DMS from a pinned source build, matugen/ghostty from the AvengeMedia Open
+# Build Service, and deploys the Ominty configuration.
+#
+# DMS is built from source on *both* families: the motion/glow overlay in
+# configs/dms/shell-overlay is coupled to a specific embedded shell tree, and
+# the OBS package now ships a newer, incompatible shell.
 #
 # The manifest is the single source of truth, so this script and
 # `ominty inspect` cannot disagree about what a layer contains.
@@ -60,7 +64,9 @@ resolve_layers() {
     fi
   done
   APT_PACKAGES=$(layer_packages apt quickshell)
-  OBS_PACKAGES=$(layer_packages obs)
+  # dms is built from source (see DMS_BUILD below), not taken from OBS: the
+  # OBS package is a newer, incompatible shell generation.
+  OBS_PACKAGES=$(layer_packages obs dms)
 }
 
 # quickshell needs its own apt-get call with an explicit target release, so it
@@ -79,7 +85,6 @@ OBS_PACKAGES=""
 # `dms` carries the DMS shell itself.
 OBS_REPOS=(
   "danklinux|home:AvengeMedia:danklinux"
-  "dms|home:AvengeMedia:dms"
 )
 OBS_SUITE="Debian_13"
 
@@ -179,6 +184,7 @@ done
 [ "$(id -u)" -eq 0 ] && die "Do not run as root; run as a normal user (sudo is used internally)."
 have sudo || die "sudo is required."
 have apt-get || die "This installer targets Debian-based systems (apt-get not found)."
+have git || die "git is required (DMS is built from source)."
 have curl || die "curl is required (used to import the OBS signing keys)."
 have gpg || die "gpg is required (used to dearmor the OBS signing keys)."
 [ -x "$OMINTY_CLI" ] || die "ominty-core submodule missing or incomplete. Run: git submodule update --init --recursive"
@@ -216,12 +222,15 @@ say "Detected family: $FAMILY (${PRETTY_NAME:-unknown})"
 case "$FAMILY" in
   debian|mint-debian)
     case "${VERSION_CODENAME:-}" in
-      trixie|faye|gigi) : ;;
+      trixie|gigi) : ;;
+      faye|bookworm)
+        die "${PRETTY_NAME:-Debian 12} is not supported: it has no trixie-backports, so Quickshell cannot be installed. Upgrade to Debian 13 / LMDE 7 first."
+        ;;
       *) warn "Untested Debian-family codename '${VERSION_CODENAME:-?}'. Debian 13 / LMDE 7 is the validated target." ;;
     esac
     ;;
   ubuntu|mint-ubuntu)
-    warn "Ubuntu-family target ($FAMILY) — supported via the source-build path (experimental)."
+    warn "Ubuntu-family target ($FAMILY) — supported via the source-build path."
     ;;
   *)
     die "Unsupported distribution (${PRETTY_NAME:-unknown}). Ominty targets Debian-family systems."
@@ -264,6 +273,42 @@ else
   # shellcheck disable=SC2086
   [ -z "$OBS_PACKAGES" ] || run sudo apt-get install -y $OBS_PACKAGES
 fi
+
+# --- 2b. DMS from source ----------------------------------------------------
+# Both families build DMS from the same pinned commit, so the motion/glow
+# overlay in §5a matches the embedded shell on every machine. On Debian this
+# replaces the OBS `dms` package (excluded above); on Ubuntu ubuntu-build.sh
+# delegates here too.
+DMS_BUILD="$REPO_DIR/scripts/source/dms-build.sh"
+DMS_DIST="${OMINTY_BUILD_DIR:-$HOME/.cache/ominty/build}/DankMaterialShell/core/internal/shellembed/dist"
+if [ -x "$DMS_BUILD" ]; then
+  say "Building DMS from source (pinned; this takes a minute)..."
+  run bash "$DMS_BUILD"
+else
+  warn "scripts/source/dms-build.sh is missing; leaving the existing DMS in place."
+fi
+
+# Use the build we just made for every later `dms` call. On an upgraded machine
+# ~/.local/bin may not be on PATH yet, and a leftover /usr/bin/dms would be a
+# different shell generation with a different plugin API.
+DMS_BIN="$HOME/.local/bin/dms"
+[ -x "$DMS_BIN" ] || DMS_BIN="$(command -v dms 2>/dev/null || true)"
+
+# --- 2c. Optional TTS runtime ----------------------------------------------
+# Piper is not packaged for Debian 13, so the optional tts layer uses a
+# user-space virtualenv. A failure here never blocks the install.
+case " $LAYERS " in
+  *" tts "*)
+    if [ -x "$REPO_DIR/scripts/tts/setup-piper.sh" ]; then
+      if [ "$DRY_RUN" -eq 1 ]; then
+        plan "bash scripts/tts/setup-piper.sh   # venv + voice model (optional)"
+      else
+        bash "$REPO_DIR/scripts/tts/setup-piper.sh" \
+          || warn "Piper setup failed; TTS stays disabled."
+      fi
+    fi
+    ;;
+esac
 
 # --- 3. Niri + xwayland-satellite -------------------------------------------
 
@@ -337,6 +382,32 @@ for f in ai.toml apps.toml; do
   fi
 done
 
+# --- 4b. Helper scripts + session units ------------------------------------
+# configs/niri/config.kdl binds and spawns these, so they have to exist on a
+# fresh machine. The TTS entries exit quietly when Piper is absent.
+say "Deploying helper scripts..."
+run mkdir -p ~/bin ~/.local/bin ~/Scripts ~/.config/quickshell ~/.config/swaylock
+for f in "$REPO_DIR"/configs/bin/*; do
+  run install -m 0755 "$f" ~/bin/
+done
+for f in "$REPO_DIR"/configs/local-bin/*; do
+  run install -m 0755 "$f" ~/.local/bin/
+done
+run install -m 0755 "$REPO_DIR/configs/Scripts/script_command_centre.sh" \
+  ~/Scripts/script_command_centre.sh
+
+# Quickshell popups spawned by config.kdl (voice indicator, TTS player).
+# -n so re-running never nests a link inside the previous target.
+run ln -sfn "$REPO_DIR/ominty-core/shell/quickshell/ominty-voice" \
+  ~/.config/quickshell/ominty-voice
+run ln -sfn "$REPO_DIR/ominty-core/shell/quickshell/ominty-tts" \
+  ~/.config/quickshell/ominty-tts
+
+# swayidle unit + swaylock theme (started by ~/.local/bin/start-swayidle).
+run cp "$REPO_DIR/configs/systemd/swayidle.service" \
+  ~/.config/systemd/user/swayidle.service
+run cp "$REPO_DIR/configs/swaylock/config" ~/.config/swaylock/config
+
 # --- 5. ominty CLI ---------------------------------------------------------
 
 say "Setting up the ominty CLI..."
@@ -367,14 +438,35 @@ if [ -x "$OVERLAY" ]; then
   if [ "$DRY_RUN" -eq 1 ]; then
     plan "$OVERLAY --check   # verify the overlay against this DMS build"
     OVERLAY_OK=1
-  elif ! ls /run/user/"$(id -u)"/danklinux-shell/*/ >/dev/null 2>&1; then
-    warn "DMS shell overlay skipped: start DMS once, then run configs/dms/shell-overlay/apply.sh"
-  elif "$OVERLAY" --check; then
-    OVERLAY_OK=1
-    say "Applying DMS shell overlay (motion + accent glow)..."
-    run "$OVERLAY"
   else
-    warn "DMS shell overlay does not match this DMS build; keeping the stock shell."
+    # Prefer the tree we just built; apply.sh falls back to runtime/package
+    # discovery when it is absent.
+    check_rc=0
+    if [ -d "$DMS_DIST" ]; then
+      "$OVERLAY" --check "$DMS_DIST" || check_rc=$?
+    else
+      "$OVERLAY" --check || check_rc=$?
+    fi
+    case "$check_rc" in
+      0)
+        OVERLAY_OK=1
+        say "Applying DMS shell overlay (motion + accent glow)..."
+        if [ -d "$DMS_DIST" ]; then
+          run "$OVERLAY" "$DMS_DIST"
+        else
+          run "$OVERLAY"
+        fi
+        ;;
+      1)
+        warn "DMS shell overlay does not match this DMS build; keeping the stock shell."
+        ;;
+      3)
+        warn "DMS shell overlay skipped: no pristine shell tree found. Start DMS once, then run configs/dms/shell-overlay/apply.sh"
+        ;;
+      *)
+        warn "DMS shell overlay check failed (exit $check_rc); keeping the stock shell."
+        ;;
+    esac
   fi
 fi
 if [ "$OVERLAY_OK" -eq 1 ] && [ -f "$OVERLAY_DROPIN" ]; then
@@ -392,31 +484,21 @@ else
   fi
 fi
 
-# --- 5b. DMS user service (source builds) -----------------------------------
-# On Debian the dms package ships its own unit; a source build does not, so we
-# install and enable one for the Ubuntu-family install.
-if [ "$FAMILY" = "ubuntu" ] || [ "$FAMILY" = "mint-ubuntu" ]; then
-  say "Installing the DMS user service..."
-  if [ "$DRY_RUN" -eq 1 ]; then
-    plan "render configs/systemd/dms.service -> ~/.config/systemd/user/dms.service (with __HOME__ replaced)"
-    plan "systemctl --user daemon-reload; systemctl --user enable dms.service"
-  else
-    mkdir -p ~/.config/systemd/user
-    sed "s|__HOME__|$HOME|g" "$REPO_DIR/configs/systemd/dms.service" \
-      > ~/.config/systemd/user/dms.service
-    systemctl --user daemon-reload
-    systemctl --user enable dms.service || warn "Could not enable dms.service"
-  fi
+# --- 5b. DMS user service ---------------------------------------------------
+# DMS is source-built on both families, so the installer owns the user unit.
+# On Debian/LMDE this overrides the packaged /usr/lib/systemd/user/dms.service
+# (same unit name, higher priority); the packaged file is left untouched.
+say "Installing the DMS user service..."
+if [ "$DRY_RUN" -eq 1 ]; then
+  plan "render configs/systemd/dms.service -> ~/.config/systemd/user/dms.service (with __HOME__ replaced)"
+  plan "systemctl --user daemon-reload; systemctl --user enable dms.service"
 else
-  # Debian/LMDE: the packaged unit stays, but a new overlay drop-in still
-  # needs a daemon-reload before the next DMS start sees it.
-  if [ "$OVERLAY_OK" -eq 1 ]; then
-    if [ "$DRY_RUN" -eq 1 ]; then
-      plan "systemctl --user daemon-reload   # pick up the overlay drop-in"
-    else
-      systemctl --user daemon-reload
-    fi
-  fi
+  mkdir -p ~/.config/systemd/user
+  backup_existing ~/.config/systemd/user/dms.service
+  sed "s|__HOME__|$HOME|g" "$REPO_DIR/configs/systemd/dms.service" \
+    > ~/.config/systemd/user/dms.service
+  systemctl --user daemon-reload
+  systemctl --user enable dms.service || warn "Could not enable dms.service"
 fi
 
 # --- 6. DMS plugins ---------------------------------------------------------
@@ -430,7 +512,11 @@ if [ "$INSTALL_PLUGINS" -eq 1 ]; then
     ~/.config/DankMaterialShell/plugins/omintyKeybinds
   for p in "${DMS_PLUGINS[@]}"; do
     if [ ! -e ~/.config/DankMaterialShell/plugins/$p ]; then
-      run dms plugins install "$p" || warn "Could not install plugin: $p"
+      if [ -n "$DMS_BIN" ]; then
+        run "$DMS_BIN" plugins install "$p" || warn "Could not install plugin: $p"
+      else
+        warn "DMS binary not found; skipping plugin install: $p"
+      fi
     fi
   done
 fi

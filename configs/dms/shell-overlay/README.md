@@ -1,26 +1,58 @@
 # DMS shell overlay — motion + accent glow
 
-DMS ships its QML shell **inside the `dms` binary** and unpacks it to
-`/run/user/$UID/danklinux-shell/<hash>/` at startup. That directory is
-read-only and is replaced whenever the DMS build changes, so Ominty's
-animation and glow tweaks cannot live there.
+DMS ships its QML shell **inside the `dms` binary** and extracts it at runtime.
+The location depends on the shell generation:
+
+| Build | Extracted to |
+|---|---|
+| AvengeMedia DMS 1.6.x (Ominty's pinned build) | `/run/user/$UID/danklinux-shell/<hash>/` |
+| Dux Shell 2.0.x | `/run/user/$UID/dms-shell/<hash>/` |
+| packaged install | `/usr/share/quickshell/dms` |
+
+Those directories are read-only and are replaced whenever the DMS build
+changes, so Ominty's animation and glow tweaks cannot live there.
 
 Instead:
 
-1. `apply.sh` copies the unpacked dist to a writable fork at
+1. `apply.sh` copies the pristine tree to a writable fork at
    `~/.local/share/dms-shell` (or `$DMS_SHELL_DIR`).
-2. It applies `dms-shell.patch` (12 files, +71/−8 lines).
-3. `~/.config/systemd/user/dms.service` points DMS at the fork with
+2. It verifies `dms-shell.patch` against a throwaway copy, then applies it
+   (12 files, +71/−8 lines). A build it does not recognise is never
+   half-patched — the stock shell keeps running.
+3. The `dms.service.d/ominty-shell.conf` drop-in points DMS at the fork with
    `Environment=DMS_SHELL_DIR=...`.
 
 ```bash
-./apply.sh                 # rebuild from the newest extracted dist
+./apply.sh                 # rebuild from the best pristine tree found
+./apply.sh --check         # verify only; nothing is written
 ./apply.sh --dry-run       # show what would happen
-./apply.sh /path/to/dist   # explicit source
+./apply.sh /path/to/dist   # explicit source (never replaced by discovery)
 systemctl --user daemon-reload && systemctl --user restart dms.service
 ```
 
-Rollback: delete the `DMS_SHELL_DIR` line from `dms.service`, then
+When no `SOURCE_DIR` is given, discovery tries `$DMS_SHELL_SRC`, both runtime
+extraction roots, the Ominty source-build cache, and the packaged locations,
+in that order.
+
+Source discovery is necessary because Ominty builds DMS from a **pinned
+commit** (`scripts/source/dms-build.sh`), and that build's tree is
+deterministic:
+
+```
+AvengeMedia/DankMaterialShell  73759d5  →  shell build c27a2bbcb6e09e50
+```
+
+That hash is the patch's base. Change the pin and the patch must be
+regenerated; `apply.sh --check` will refuse until it is.
+
+| Exit | Meaning |
+|---|---|
+| `0` | Applied, or (with `--check`) the patch applies. |
+| `1` | Patch does not match this build; stock shell left in place. |
+| `2` | Bad usage. |
+| `3` | No pristine tree found. |
+
+Rollback: delete `~/.config/systemd/user/dms.service.d/ominty-shell.conf`, then
 `systemctl --user daemon-reload && systemctl --user restart dms.service`.
 
 ## What the patch changes
@@ -69,14 +101,21 @@ DMS's own QML animation engine and why the glow is a QML effect.
 
 ## Updating after a DMS upgrade
 
+A normal `./install.sh` re-run handles this: it rebuilds DMS when the pin
+changed and re-applies the overlay from the freshly built tree. To do it by
+hand:
+
 ```bash
-# 1. Restart DMS once so it extracts the new build
-systemctl --user restart dms.service
-# 2. Rebuild the fork from the new dist
+# 1. Rebuild DMS at the pinned commit (skips if unchanged)
+scripts/source/dms-build.sh
+# 2. Rebuild the fork from the new tree
 cd configs/dms/shell-overlay && ./apply.sh
-# 3. Restart again
-systemctl --user restart dms.service
+# 3. Restart DMS
+systemctl --user daemon-reload && systemctl --user restart dms.service
 ```
+
+If you bump the pin, regenerate the patch first: the embedded shell hash
+changes and `--check` will report `not-applicable` until the patch matches.
 
 If a hunk fails, the patch context changed upstream — re-apply the intent
 against the new file and regenerate:

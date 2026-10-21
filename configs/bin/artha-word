@@ -1,0 +1,79 @@
+#!/usr/bin/env bash
+# artha-word — launch Artha with the currently selected word.
+#
+# Artha is an X11 app that prefilled its query from X11 PRIMARY — which is
+# empty under Wayland, so the field opened blank.  This wrapper:
+#   1. captures the selected text (Wayland PRIMARY, clipboard fallback);
+#   2. ensures Artha is running and finds its window on the Niri side;
+#   3. focuses it and PASTES the word into the query entry (Ctrl+V from the
+#      bridged clipboard), restoring your clipboard afterwards;
+#   4. presses Enter so the lookup happens (as before).
+# Under X11 (Cinnamon) PRIMARY already works and Artha is launched directly.
+set -uo pipefail
+
+SELF=artha-word
+LOG=/tmp/artha-word.log
+log() { printf '[%s] %s\n' "$(date +%H:%M:%S)" "$*" >>"$LOG"; }
+
+capture() {
+    if [ -n "${WAYLAND_DISPLAY:-}" ]; then
+        wl-paste --primary 2>/dev/null || wl-paste 2>/dev/null
+    else
+        xclip -o -selection primary 2>/dev/null || true
+    fi
+}
+
+guid() { timeout 4 niri msg -j windows 2>/dev/null | python3 -c '
+import json, sys
+try:
+    for w in json.load(sys.stdin):
+        if (w.get("app_id") or "").lower() in ("artha",) or "artha" in (w.get("title") or "").lower():
+            print(w.get("id")); break
+except Exception:
+    pass
+'; }
+
+if [ -z "${WAYLAND_DISPLAY:-}" ]; then
+    exec /usr/bin/artha "$@"
+fi
+
+# --- 1. capture + normalise the selection -------------------------------
+text="$(capture 2>/dev/null | tr '\n' ' ' | sed -e 's/^[[:space:][:punct:]]*//' -e 's/[[:space:][:punct:]]*$//' -e 's/[[:space:]]\+/ /g')"
+log "text='$text'"
+
+# --- 2. ensure Artha (the daemon) is running ----------------------------
+if ! pgrep -x artha >/dev/null 2>&1; then
+    /usr/bin/artha >/dev/null 2>&1 &
+    sleep 2
+fi
+
+# --- 3. find + focus its window on the Niri side ------------------------
+wid="$(guid)"
+if [ -z "$wid" ]; then
+    /usr/bin/artha >/dev/null 2>&1 &   # ask it to show itself
+    sleep 2
+    wid="$(guid)"
+fi
+log "window=$wid"
+[ -n "$wid" ] && timeout 4 niri msg action focus-window --id "$wid" >>"$LOG" 2>&1
+sleep 0.4
+
+if [ -z "$text" ]; then
+    exit 0   # nothing to type; the window is up for manual entry
+fi
+
+# --- 4. paste the word into the (focused) query entry --------------------
+prev="$(wl-paste 2>/dev/null || true)"
+printf '%s' "$text" | wl-copy 2>/dev/null
+sleep 0.2
+if command -v wtype >/dev/null 2>&1; then
+    wtype -M ctrl -k v -m ctrl        # paste
+    sleep 0.4
+    wtype -k Return                   # trigger the lookup
+fi
+# --- 5. restore the previous clipboard ----------------------------------
+sleep 0.3
+if [ -n "$prev" ]; then
+    printf '%s' "$prev" | wl-copy 2>/dev/null
+fi
+exit 0

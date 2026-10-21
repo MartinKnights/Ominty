@@ -1,0 +1,27 @@
+#!/bin/sh
+# wait-for-tray — wait until a StatusNotifierItem host (tray) is registered on
+# the session bus, then run the given command. Apps launched before the desktop
+# shell's tray host is ready never (re)register their tray icon, so we delay
+# them until the host exists.
+#
+# Usage: wait-for-tray <command> [args...]
+# Timeout: WAIT_FOR_TRAY_TIMEOUT seconds (default 25).
+
+timeout="${WAIT_FOR_TRAY_TIMEOUT:-25}"
+
+if command -v gdbus >/dev/null 2>&1 && command -v date >/dev/null 2>&1; then
+    deadline=$(( $(date +%s) + timeout ))
+    while [ "$(date +%s)" -lt "$deadline" ]; do
+        if gdbus call --session \
+                --dest org.kde.StatusNotifierWatcher \
+                --object-path /StatusNotifierWatcher \
+                --method org.freedesktop.DBus.Properties.Get \
+                org.kde.StatusNotifierWatcher IsStatusNotifierHostRegistered 2>/dev/null \
+             | grep -q 'true'; then
+            break
+        fi
+        sleep 0.3
+    done
+fi
+
+exec "$@"

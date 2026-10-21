@@ -57,49 +57,97 @@ The installer is **idempotent** — re-running it is safe. It will:
 10. Install the DMS plugins (Ominty Actions, Ominty Keybinds, and the
     third-party set: dankHooks, dankKDEConnect, dankLauncherKeys,
     quickCapture, wallpaperCarousel).
-11. If DMS has already unpacked its shell, verify and apply the Ominty
+11. Build DMS from the pinned source commit and install the helper scripts
+    (`configs/bin`, `configs/local-bin`, `configs/Scripts`), the Quickshell
+    voice/TTS config links, and the `swayidle` unit.
+12. If a pristine DMS shell tree is available, verify and apply the Ominty
     motion + accent-glow overlay, then write the `dms.service` drop-in that
-    points DMS at the fork. On a fresh install this step is skipped (DMS has
-    not run yet) and can be re-run later — see *DMS shell overlay* below.
-12. Validate the registry and the Niri config.
+    points DMS at the fork. The tree is found automatically (build cache,
+    runtime extraction or package) — see *DMS shell overlay* below.
+13. Validate the registry and the Niri config.
 
 Existing configuration files are backed up with a
 `.bak-ominty-<timestamp>` suffix before being replaced.
 
+### DMS from source
+
+DMS is built from **one pinned commit** on both families:
+
+```
+AvengeMedia/DankMaterialShell  73759d575210e8a4eb99b308283046b650df2ac3
+  └─ dank-qml-common           fc42c683c7fd16e7583536acabae54a5fd678fc3
+      → embedded shell build   c27a2bbcb6e09e50
+```
+
+That build id is what the overlay patch is written against, so the pin and the
+patch move together. `scripts/source/dms-build.sh` does the work in user space
+(no sudo), caches the checkout in `~/.cache/ominty/build`, records the built
+commit in `.ominty-dms-ref`, and skips the build when the pin has not changed.
+Override with `OMINTY_DMS_REF` / `OMINTY_DMS_FORCE=1`.
+
+> The AvengeMedia OBS `dms` package is a newer shell generation with a
+> different QML layout. `install.sh` therefore installs `matugen`, `ghostty`
+> and friends from OBS but **not** `dms`.
+
 ### DMS shell overlay
 
-DMS embeds its QML shell in the `dms` binary and unpacks it on first start.
-The motion + accent-glow overlay therefore needs that unpacked tree:
+DMS embeds its QML shell in the `dms` binary and extracts it at runtime —
+`/run/user/$UID/danklinux-shell/<build>/` for the pinned 1.6.x build,
+`/run/user/$UID/dms-shell/<build>/` for newer shells — and packaged installs
+keep it at `/usr/share/quickshell/dms`. The motion + accent-glow overlay
+copies that pristine tree to a writable fork:
 
 ```sh
 configs/dms/shell-overlay/apply.sh --check   # does it match this DMS build?
 configs/dms/shell-overlay/apply.sh           # rebuild the fork from pristine
 ```
 
-`--check` is read-only and exits `1` when the patch does not match. `apply.sh`
-verifies against a temporary copy first, so a mismatched build is never left
-half-patched. On success it records the base build in
+`--check` is read-only and exits:
+
+| Exit | Meaning |
+| --- | --- |
+| `0` | The patch applies to the discovered (or given) tree. |
+| `1` | The patch does **not** apply to this DMS build. |
+| `2` | Bad usage. |
+| `3` | No pristine shell tree found (pass a path, or build/start DMS). |
+
+An explicit `SOURCE_DIR` argument is always honoured and never replaced by
+discovery. Without one, `apply.sh` tries `$DMS_SHELL_SRC`, the runtime
+extraction for both shell generations, the source-build cache, and the package
+locations, in that order.
+
+`apply.sh` verifies against a temporary copy first, so a mismatched build is
+never left half-patched. On success it records the base build in
 `~/.local/share/dms-shell/.ominty-overlay.json`, which `ominty inspect`
 reports as `desktop.shell_overlay.base`.
 
 The fork is activated by the drop-in
 `~/.config/systemd/user/dms.service.d/ominty-shell.conf` (installed
-automatically). It sets `DMS_SHELL_DIR`, and works on both Debian (packaged
-unit) and Ubuntu (source-built unit). Rolling back means deleting that drop-in
-and restarting `dms.service`.
+automatically). It sets `DMS_SHELL_DIR`. `install.sh` writes the `dms.service`
+user unit on both families, so the drop-in always applies (on Debian it
+overrides the packaged unit of the same name). Rolling back means deleting
+that drop-in and restarting `dms.service`.
 
-Re-run `apply.sh` after every DMS upgrade: the unpacked build id changes and
-the old fork no longer matches.
+Re-run `apply.sh` after every DMS change: the unpacked build id changes and the
+old fork no longer matches.
 
 ### Third-party repositories
 
-`dms`, `matugen`, and `ghostty` are **not packaged in Debian**. They come from
-AvengeMedia's Open Build Service, and `install.sh` wires these up automatically:
+`matugen` and `ghostty` are **not packaged in Debian**. They come from
+AvengeMedia's Open Build Service, and `install.sh` wires this up automatically:
 
 | OBS project | Provides |
 |---|---|
-| `home:AvengeMedia:danklinux` | `matugen`, `ghostty`, `danksearch`, `dgop`, `niri` |
-| `home:AvengeMedia:dms` | `dms` (the shell itself) |
+| `home:AvengeMedia:danklinux` | `matugen`, `ghostty`, `danksearch`, `dgop` |
+
+This adds `/etc/apt/sources.list.d/danklinux.list` plus the matching keyring in
+`/etc/apt/keyrings/`.
+
+> **`dms` is not installed from OBS.** The project there now ships a newer shell
+> generation whose QML layout the overlay patch does not match, so
+> `install.sh` builds the pinned commit instead (see *DMS from source*). It also
+> no longer configures `home:AvengeMedia:dms`, so an `apt upgrade` cannot pull
+> the incompatible package over a working install.
 
 This adds `/etc/apt/sources.list.d/{danklinux,dms}.list` plus the matching
 keyrings in `/etc/apt/keyrings/`.
@@ -183,18 +231,28 @@ git -C Ominty submodule update --init --recursive
 ./install.sh        # re-run; configs are backed up and replaced
 ```
 
-If `dms` was upgraded, re-apply the shell overlay so the fork matches the new
-build:
+`install.sh` is idempotent. On a re-run it also:
+
+- rebuilds DMS when the pinned commit in `scripts/source/dms-build.sh` changed
+  (and skips the build when it did not),
+- re-applies the shell overlay against the freshly built tree,
+- redeploys the helper scripts and refreshes the Quickshell voice/TTS links.
+
+If you want to check the overlay on its own:
 
 ```sh
 configs/dms/shell-overlay/apply.sh --check   # expect: state: applicable
-configs/dms/shell-overlay/apply.sh
-systemctl --user daemon-reload && systemctl --user restart dms.service
 ```
 
-If `--check` reports `not-applicable`, DMS changed the files the patch touches.
-`install.sh` leaves the stock shell running in that case; update
-`dms-shell.patch` before re-applying.
+Exit `1` (`not-applicable`) means DMS changed the files the patch touches.
+`install.sh` then leaves the stock shell running — update `dms-shell.patch`
+before re-applying. Exit `3` just means no pristine tree was found; start DMS
+once, or pass the path:
+
+```sh
+configs/dms/shell-overlay/apply.sh ~/.cache/ominty/build/DankMaterialShell/core/internal/shellembed/dist
+systemctl --user daemon-reload && systemctl --user restart dms.service
+```
 
 ## Uninstall
 

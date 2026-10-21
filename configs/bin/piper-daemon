@@ -1,0 +1,93 @@
+#!/bin/bash
+# Piper TTS Daemon - generates audio from queue, signals indicator to play
+
+VOICE="${PIPER_VOICE:-$HOME/.local/share/piper/voices/en_GB-northern_english_male-medium.onnx}"
+QUEUE_FILE="${PIPER_QUEUE_FILE:-/tmp/piper_queue.txt}"
+STATUS_FILE="${PIPER_STATUS_FILE:-/tmp/piper_status.json}"
+AUDIO_OUTPUT="${PIPER_AUDIO_OUTPUT:-/tmp/piper_output.wav}"
+LOG_FILE="${PIPER_DAEMON_LOG:-/tmp/piper_daemon.log}"
+
+exec >> "$LOG_FILE" 2>&1
+echo "Daemon started"
+
+# Piper is optional: the tts layer installs it into ~/.piper-venv (see
+# scripts/tts/setup-piper.sh). If it or the voice model is missing, exit
+# quietly instead of leaving a broken startup entry in the Niri log.
+if [ -z "${PIPER_BIN:-}" ]; then
+    if [ -x "$HOME/.piper-venv/bin/piper" ]; then
+        PIPER_BIN="$HOME/.piper-venv/bin/piper"
+    elif command -v piper >/dev/null 2>&1; then
+        PIPER_BIN="$(command -v piper)"
+    fi
+fi
+if [ -z "${PIPER_BIN:-}" ] || [ ! -x "$PIPER_BIN" ]; then
+    echo "piper binary not found; run scripts/tts/setup-piper.sh (TTS stays disabled)."
+    exit 0
+fi
+if [ ! -f "$VOICE" ]; then
+    echo "voice model missing at $VOICE; run scripts/tts/setup-piper.sh (TTS stays disabled)."
+    exit 0
+fi
+
+# Single instance: only one daemon may consume the queue system-wide, or two
+# sessions would both speak every selection. flock releases on process exit,
+# so a later session can take over cleanly.
+LOCK_FILE="/tmp/piper_daemon.lock"
+exec 9>"$LOCK_FILE"
+if ! flock -n 9; then
+    echo "Another piper-daemon is already running; exiting."
+    exit 0
+fi
+
+# Helper to write status JSON
+write_status() {
+    echo "$1" > "$STATUS_FILE"
+}
+
+while true; do
+    if [ -s "$QUEUE_FILE" ]; then
+        TEXT=$(cat "$QUEUE_FILE")
+        > "$QUEUE_FILE"
+        
+        if [ -n "$TEXT" ]; then
+            echo "Processing text: ${TEXT:0:50}..."
+            
+            # Signal: processing started
+            write_status '{"state":"processing"}'
+            
+            # Generate audio to a temporary file first, then move atomically
+            TMPDIR=$(mktemp -d)
+            TMP_OUTPUT="$TMPDIR/output.wav"
+            
+            echo "$TEXT" | "$PIPER_BIN" -m "$VOICE" --output_file "$TMP_OUTPUT" 2>/dev/null
+            
+            # Move to final location atomically
+            if [ -f "$TMP_OUTPUT" ]; then
+                mv -f "$TMP_OUTPUT" "$AUDIO_OUTPUT"
+                # Signal: audio ready for playback
+                write_status "{\"state\":\"ready\",\"audio_file\":\"$AUDIO_OUTPUT\"}"
+                echo "Audio ready: $AUDIO_OUTPUT"
+            else
+                # Check for split output files
+                WAV_FILES=$(ls "$TMPDIR"/*.wav 2>/dev/null)
+                if [ -n "$WAV_FILES" ]; then
+                    # Combine multiple wav files into one
+                    if command -v sox &>/dev/null; then
+                        sox "$TMPDIR"/*.wav "$AUDIO_OUTPUT"
+                    else
+                        # Fallback: just concat raw (not ideal but works for PCM)
+                        cat "$TMPDIR"/*.wav > "$AUDIO_OUTPUT"
+                    fi
+                    write_status "{\"state\":\"ready\",\"audio_file\":\"$AUDIO_OUTPUT\"}"
+                    echo "Audio ready (combined): $AUDIO_OUTPUT"
+                else
+                    echo "ERROR: No audio generated"
+                    write_status '{"state":"idle"}'
+                fi
+            fi
+            
+            rm -rf "$TMPDIR"
+        fi
+    fi
+    sleep 0.5
+done

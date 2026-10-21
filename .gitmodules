@@ -1,3 +1,4 @@
 [submodule "ominty-core"]
 	path = ominty-core
-	url = git@github.com:MartinKnights/ominty-core.git
+	# HTTPS so a fresh clone works without SSH keys (git submodule update --init).
+	url = https://github.com/MartinKnights/ominty-core.git

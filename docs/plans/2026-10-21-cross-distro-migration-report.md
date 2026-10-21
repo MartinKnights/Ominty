@@ -2,7 +2,8 @@
 
 **Date:** 2026-10-21
 **Status:** Implemented — `ominty-core` `21c0fb4` (assessment) and the `Ominty`
-installer/systemd/docs slice. Remaining open items are listed in §11.
+installer/systemd/docs slice. A second readiness pass (LMDE 7 upgrade test) is
+recorded in §13.
 **Source commits:** `Ominty` `914e8ea` · `ominty-core` `23a8d76`
 **Targets:** Debian 13 / LMDE 7 (validated) and Ubuntu-family: Ubuntu 24.04
 `noble`, Mint 22.x, Ubuntu 25.10/26.04 (source-build or PPA path)
@@ -47,12 +48,12 @@ depend on *versions* that differ between the OBS build and the source build.
 |---|---|---|---|
 | `ominty inspect` family | `debian` / `mint-debian` | `ubuntu` / `mint-ubuntu` | same |
 | quickshell | Debian `trixie-backports` (pinned) | built from source (Qt 6.8.3) | PPA possible |
-| DMS | OBS `home:AvengeMedia:dms` (`1.6.x`) | built from source (`ominty-managed-v1+<sha>`) | PPA |
+| DMS | **built from source, pinned** (§13) | built from source (same pin) | PPA or source |
 | matugen | OBS | `cargo install matugen` (4.x) | PPA |
 | niri | bundled `.deb` 26.4.0-1 | bundled `.deb` + `libseat1` + libdisplay-info 0.2 | bundled `.deb` |
-| `dms.service` | shipped by the `dms` package | written by `install.sh` | written by `install.sh` (or PPA unit) |
+| `dms.service` | user unit written by `install.sh` (overrides the packaged one) | written by `install.sh` | written by `install.sh` (or PPA unit) |
 | Ayatana typelib | `0.5.94-1` present in the apt archive | `0.5.93-1build3` in the apt archive | present |
-| validation status | validated | code says `supported`, docs say `experimental` | untested |
+| validation status | validated | supported (source build), `noble` validated | untested |
 
 **Evidence from the two real machines**
 
@@ -69,8 +70,8 @@ depend on *versions* that differ between the OBS build and the source build.
 | # | Issue | Evidence | Direction |
 |---|---|---|---|
 | D1 | `platform.is_lmde` is true on Ubuntu-based Mint | `ominty inspect --json` → `"is_lmde": true`, `"family": "mint-ubuntu"` | test `ID=linuxmint` **and** `debian` in `ID_LIKE` |
-| D2 | Docs say Ubuntu-family is experimental; code reports `supported` | `docs/UBUNTU.md` vs `_check_platform()` | pick one; recommend “supported (source build)” and document it |
-| D3 | `SUPPORTED_CODENAMES` only lists Debian codenames | `inspect.py` | add a family-aware validated set (`trixie`, `faye`, `gigi`; `noble`, `zena`) |
+| D2 | Docs say Ubuntu-family is experimental; code reports `supported` | `docs/UBUNTU.md` vs `_check_platform()` | **resolved:** docs now say "supported (source build)" |
+| D3 | `SUPPORTED_CODENAMES` only lists Debian codenames | `inspect.py` | **resolved:** `trixie`/`gigi` validated; `noble` validated for Ubuntu; `faye`/`bookworm` block (LMDE 6 has no `trixie-backports`) |
 | D4 | TTS dependencies are absent from the layer manifest | no TTS layer in `inspect.py` | add a `tts` layer (see §6.2) |
 
 ---
@@ -403,11 +404,11 @@ installer will reference `inspect` fields that do not exist yet.
 |---|---|---|
 | DMS build mismatch | patch fails or half-applies | `--check` + skip; remove drop-in / env line |
 | DMS upgrade breaks fork | stale UI | `apply.sh` refresh; worst case remove `DMS_SHELL_DIR` |
-| Debian unit overwritten | DMS loses package defaults | never overwrite; drop-in only |
+| Debian unit overridden | packaged unit defaults no longer used | user unit is written on purpose (§13); packaged file untouched; delete `~/.config/systemd/user/dms.service` to fall back |
 | niri without `custom-shader` | config invalid | version probe; render without shader |
 | typelib absent | no tray icon | apt, then user-prefix fallback |
-| Ubuntu docs/code disagree | agent makes wrong call | fix D2 before push |
-| Scripts untracked | dead keybindings on fresh install | ship under `configs/tts/bin` |
+| Ubuntu docs/code disagree | agent makes wrong call | **resolved** — both say "supported (source build)" |
+| Scripts untracked | dead keybindings on fresh install | **resolved** — shipped in `configs/bin`, `configs/local-bin`, `configs/Scripts` |
 
 Rollback is always: remove the drop-in (or `DMS_SHELL_DIR`), restore the
 `.bak-ominty-<timestamp>` config, restart `dms.service`.
@@ -463,3 +464,92 @@ Rollback is always: remove the drop-in (or `DMS_SHELL_DIR`), restore the
 Not in this slice: shipping the Piper helper scripts (`configs/tts/bin`),
 the `build` package source for source-built desktop tools, and the per-distro
 `packages/` layout.
+
+---
+
+## 13. Readiness slice — LMDE 7 upgrade test
+
+Context: an LMDE 7 "gigi" laptop already running an earlier Ominty/Niri/DMS is
+being upgraded from the GitHub repo, to exercise the update path and find
+problems. This slice makes that run work end-to-end.
+
+### 13.1 Decisions
+
+| Question | Decision |
+|---|---|
+| LMDE release | LMDE 7 `gigi` = Debian 13 `trixie` (validated). LMDE 6 `faye` = Debian 12 is **not** supported. |
+| Target state | Existing Ominty install → **upgrade**, not a stock migration. |
+| Untracked helper scripts | Ship them in the repo and deploy them. |
+| DMS on Debian | **Source-build the same pinned commit** as the workstation, so the overlay applies. |
+
+### 13.2 DMS pin (the overlay's anchor)
+
+```
+AvengeMedia/DankMaterialShell  73759d575210e8a4eb99b308283046b650df2ac3
+  └─ dank-qml-common           fc42c683c7fd16e7583536acabae54a5fd678fc3
+      → embedded shell         c27a2bbcb6e09e50   ← dms-shell.patch base
+```
+
+Verified: that checkout's `core/internal/shellembed/dist` is exactly
+`c27a2bbcb6e09e50` (1348 files) and `patch --dry-run` exits `0`. The OBS
+`dms_2.0.0db1` package (shell hash `496f460c1c70f6d9`) does **not** match —
+its QML moved to `DCommon/` — so the OBS package is no longer installed.
+
+`scripts/source/dms-build.sh` builds the pin in user space, caches it in
+`~/.cache/ominty/build`, records `.ominty-dms-ref`, and skips when unchanged.
+`ubuntu-build.sh` delegates to it, so both families get the same binary.
+
+### 13.3 Changes landed
+
+- `.gitmodules` → HTTPS (a keyless `git submodule update --init` now works).
+- Codename correctness: `SUPPORTED_CODENAMES = ("trixie", "gigi")`;
+  `faye`/`bookworm` are blocking findings and `install.sh` dies early with an
+  actionable message instead of failing later at `trixie-backports`.
+- `apply.sh`: multi-candidate discovery (`danklinux-shell`, `dms-shell`,
+  source-build cache, `/usr/share/quickshell/dms`), documented exit codes
+  `0/1/2/3`, explicit `SOURCE_DIR` always honoured, and an explicit-but-missing
+  path is a clear error rather than a silent discovery fallback.
+- `install.sh`: builds DMS on **both** families, gates the overlay on
+  `apply.sh --check` exit codes, writes the `dms.service` user unit on both
+  families, runs the optional Piper setup, and deploys the helper scripts.
+- New `scripts/tts/setup-piper.sh`: user-space venv + `piper-tts` (not packaged
+  in Debian 13) + voice download; failure only disables TTS.
+- Helper scripts shipped: `configs/bin` (`artha-word`, `read-selection`,
+  `tts-pick`, `piper-daemon`, `piper-indicator`), `configs/local-bin`
+  (`screen-ocr`, `start-swayidle`, `wait-for-tray`, `clip-tool`),
+  `configs/Scripts/script_command_centre.sh`, plus `swayidle.service` and
+  `swaylock/config`.
+- `piper-daemon` / `piper-indicator` degrade quietly when Piper or the GTK
+  typelibs are absent, so a TTS-less machine has no startup errors.
+- Three `spawn-at-startup` entries for apps Ominty does not install
+  (`xembedsniproxy`, `vorta`, `mullvad-vpn`, `mintupdate`, `kdeconnectd`) are
+  guarded with `command -v`/`-x` shims.
+- Layer manifest gained the helper dependencies (`wl-clipboard`, `slurp`,
+  `grim`, `wtype`, `xclip`, `zenity`, `artha`, `tesseract-ocr`,
+  `libnotify-bin`, `libglib2.0-bin`, `swayidle`, `swaylock`, `sox`,
+  `python3-venv`) — all present in Debian 13.
+
+### 13.4 Verification performed
+
+| Check | Result |
+|---|---|
+| `python3 -m pytest -q` (`ominty-core`) | 305 passed |
+| `bash -n` on every edited shell script | clean |
+| `py_compile` on `piper-indicator` | clean |
+| `niri validate` on a rendered `config.kdl` | `config is valid` |
+| `apply.sh --check <pinned dist>` | `applicable`, exit 0 |
+| `apply.sh --check <DMS 2.0.0 tree>` | `not-applicable`, exit 1 |
+| `apply.sh --check /missing` | exit 3, clear message |
+| `apply.sh --check` (discovery) | finds the runtime extraction, exit 0 |
+| `apply.sh` into a throwaway fork | marker written, glow property present |
+| `apply.sh` on an incompatible build | refuses, fork not created |
+| `./install.sh --dry-run --layers "desktop tts"` | plans build, overlay, scripts, symlinks, unit |
+
+### 13.5 Remaining caveats
+
+- The laptop keeps its old `dms` package on disk (if it had one). It is
+  harmless: the user unit runs `~/.local/bin/dms`. Removing the package is
+  optional and not automated.
+- A pinned bump means regenerating `dms-shell.patch`; `--check` blocks the
+  half-patch in the meantime.
+- `danksearch`/`dgop`/`ghostty` still come from OBS and are unaffected.

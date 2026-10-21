@@ -319,14 +319,16 @@ spawn-at-startup "__HOME__/bin/piper-indicator"
 // the DMS bar's systemTray widget displays.
 // XEmbed -> SNI bridge: the DMS bar is SNI-only, so legacy XEmbed tray apps
 // (Update Manager, NetworkManager Applet, Artha) need this to appear.
-spawn-at-startup "xembedsniproxy"
-spawn-at-startup "wait-for-tray" "vorta" "--daemonize"
-spawn-at-startup "wait-for-tray" "/opt/Mullvad VPN/mullvad-vpn"
-spawn-at-startup "mintupdate"
+// Each entry is guarded: on a machine where the app is not installed the
+// command is a no-op instead of a startup error.
+spawn-at-startup "sh" "-c" "command -v xembedsniproxy >/dev/null 2>&1 && exec xembedsniproxy"
+spawn-at-startup "sh" "-c" "command -v vorta >/dev/null 2>&1 && exec wait-for-tray vorta --daemonize"
+spawn-at-startup "sh" "-c" "[ -x '/opt/Mullvad VPN/mullvad-vpn' ] && exec wait-for-tray '/opt/Mullvad VPN/mullvad-vpn'"
+spawn-at-startup "sh" "-c" "command -v mintupdate >/dev/null 2>&1 && exec mintupdate"
 // KDE Connect backend for the DMS dankKDEConnect plugin (the plugin itself
 // provides the Niri-side integration; kdeconnectd's own tray icon is XEmbed
 // and cannot appear in the SNI-only DMS tray).
-spawn-at-startup "/usr/lib/x86_64-linux-gnu/libexec/kdeconnectd"
+spawn-at-startup "sh" "-c" "for d in /usr/lib/x86_64-linux-gnu/libexec/kdeconnectd /usr/libexec/kdeconnectd; do [ -x \"$d\" ] && exec \"$d\"; done"
 
 // Ominty voice recording indicator (docs/ai/11-voice-integration.md, ADR-007).
 // A focused Quickshell popup showing the live mic level while dictating; it

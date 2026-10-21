@@ -29,15 +29,22 @@ only for `mint-debian`; Ubuntu-based Mint is `mint-ubuntu`.
 | Component | Debian 13 / LMDE 7 | Ubuntu-family |
 | --- | --- | --- |
 | `quickshell` | Debian `trixie-backports` | **built from source** — needs Qt ≥ 6.6 (Ubuntu 24.04 ships 6.4.2) |
-| `dms` | AvengeMedia OBS (`Debian_13`) | **built from source** (Go, embeds the shell) |
+| `dms` | **built from source** (pinned commit) | **built from source** (the same pinned commit) |
 | `matugen` | AvengeMedia OBS | **built from source** (Rust/cargo) |
 | `ghostty` | AvengeMedia OBS | not installed by default (alacritty is) |
 | `niri` | bundled `.deb` | bundled `.deb`, **plus undeclared runtime deps** |
 
+DMS is source-built on **both** families, not just Ubuntu. The motion/glow
+overlay is coupled to the embedded shell tree, and the OBS `dms` package has
+moved to a newer shell generation with a different QML layout. Pinning one
+commit (`scripts/source/dms-build.sh`) keeps the desktop identical on every
+machine and keeps the overlay applicable.
+
 The AvengeMedia Launchpad PPA (`ppa:avengemedia/danklinux`, `…/dms`) is Ubuntu
 25.10 / 26.04+ only — it has no `noble` (24.04) builds — so Mint 22.x cannot use
-it. `platform.desktop_source` reflects this: `ppa` when the Launchpad PPA is
-configured, `source` when DMS was built into `~/.local`, `obs` on Debian/LMDE.
+it. `platform.desktop_source` reflects what is actually installed: `source`
+when DMS came from the pinned build (the current path on both families), `ppa`
+or `obs` for an older package-based install, and `none` when DMS is absent.
 
 ### niri `.deb` gaps on Ubuntu
 
@@ -58,7 +65,7 @@ Without these, `niri` installs but dies at runtime with `libseat.so.1` /
 
 ```sh
 scripts/ubuntu/ubuntu-deps.sh    # sudo boundary: build deps, niri .debs, libseat1, libdisplay-info 2
-scripts/ubuntu/ubuntu-build.sh   # user space: Qt (aqtinstall) -> Quickshell -> DMS -> matugen
+scripts/ubuntu/ubuntu-build.sh   # user space: Qt (aqtinstall) -> Quickshell -> DMS (shared pin) -> matugen
 ```
 
 then continues with the shared steps (deploy configs, `ominty` CLI symlinks,
@@ -84,16 +91,19 @@ locations are overridable by environment variable:
 
 ### Desktop shell overlay and the systemd drop-in
 
-Ubuntu-family installs write a full `dms.service` (there is no packaged unit),
-but the motion + accent-glow overlay is delivered the same way it is on
-Debian: through `~/.config/systemd/user/dms.service.d/ominty-shell.conf`, which
-sets `DMS_SHELL_DIR`. The drop-in is written only after
+`install.sh` writes a full `dms.service` user unit on **both** families (on
+Debian/LMDE it overrides the packaged unit of the same name). The motion +
+accent-glow overlay is delivered through
+`~/.config/systemd/user/dms.service.d/ominty-shell.conf`, which sets
+`DMS_SHELL_DIR`. The drop-in is written only after
 `configs/dms/shell-overlay/apply.sh --check` confirms the patch matches the
-built DMS. A mismatched build leaves the stock shell running and removes any
+built shell. A mismatched build leaves the stock shell running and removes any
 stale drop-in.
 
-On a fresh machine DMS has not unpacked its shell yet, so `install.sh` skips
-the overlay. After the first login:
+Because `install.sh` builds DMS itself, the pristine tree is already at
+`~/.cache/ominty/build/DankMaterialShell/core/internal/shellembed/dist`, so the
+overlay is applied during the install — no first-login step is needed. If you
+build DMS outside the installer, run:
 
 ```sh
 configs/dms/shell-overlay/apply.sh
@@ -105,12 +115,11 @@ Source-built DMS embeds a build id; `ominty inspect` reports it under
 
 ## Known limitations
 
-- The layer manifest in `ominty-core` (`cli/omintylib/inspect.py`) is
-  Debian-centric: source-built `quickshell`/`dms`/`matugen` are not seen by
-  `dpkg`, so `ominty inspect` reports them as missing on Ubuntu-family. Treat
-  the `desktop` layer's package findings on Ubuntu-family as informational
-  until the manifest gains a `build` source. `platform.desktop_source` already
-  records that the desktop came from a build rather than a package.
+- The layer manifest in `ominty-core` (`cli/omintylib/inspect.py`) marks
+  source-built packages (`quickshell`, `dms`, `matugen`) with `binary=` names,
+  so `ominty inspect` resolves them from `PATH`/`~/.local/bin` and reports
+  `"source": "build"` instead of claiming they are missing. `dpkg` still does
+  not know about them, so tools outside Ominty will not see a package version.
 - `ominty` still targets the Debian-first layer set; some optional layer
   packages (e.g. `ghostty`, `firefox-esr`) do not exist on Ubuntu-family and are
   skipped.

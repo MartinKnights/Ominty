@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+# Start the swayidle unit from the Niri session.
+#
+# Why a wrapper instead of a bare `systemctl --user start` in config.kdl:
+# swayidle needs WAYLAND_DISPLAY to reach the compositor, but a systemd unit
+# inherits the *user manager's* environment, not the compositor's. Importing
+# it explicitly makes the unit work regardless of how the session was started.
+#
+# Only called from ~/.config/niri/config.kdl, so this never runs under
+# Cinnamon (which has its own screen lock).
+
+set -euo pipefail
+
+if [ -z "${WAYLAND_DISPLAY:-}" ]; then
+    echo "start-swayidle: WAYLAND_DISPLAY is not set; refusing to start swayidle" >&2
+    exit 1
+fi
+
+# Import the compositor's session variables into the user manager so the unit
+# inherits them. Names only -- values are read from this process's environment.
+systemctl --user import-environment WAYLAND_DISPLAY XDG_SESSION_TYPE XDG_CURRENT_DESKTOP
+systemctl --user start swayidle.service
+
+echo "start-swayidle: swayidle.service started (WAYLAND_DISPLAY=$WAYLAND_DISPLAY)" >&2

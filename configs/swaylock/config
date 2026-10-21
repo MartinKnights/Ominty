@@ -1,0 +1,18 @@
+# Swaylock configuration
+# Used only by the Niri/DMS session. Cinnamon keeps its own screen lock.
+# Docs: man swaylock
+
+# Clock
+font=JetBrainsMono Nerd Font:size=44
+color=#88c0d0
+# Dim the rest of the screen slightly so the clock stays dominant
+background=#2e3440
+message_color=#d8dee9
+
+# Show the input field immediately so unlocking does not need a second click
+indicator_radius=7
+indicator_thickness=3
+
+# No screensaver artwork or user image — keep it minimal and cheap to draw.
+# Set show_systray=true only if you want a tray on the lock screen.
+show_systray=false

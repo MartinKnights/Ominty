@@ -1,0 +1,5 @@
+#!/bin/sh
+# Pick a document and read it aloud with the Ominty TTS document player.
+f=$(zenity --file-selection --title="Select a document to read aloud" \
+  --file-filter='Documents (md txt pdf doc docx epub) | *.md *.txt *.pdf *.doc *.docx *.epub' 2>/dev/null)
+[ -n "$f" ] && exec ominty tts say "$f"

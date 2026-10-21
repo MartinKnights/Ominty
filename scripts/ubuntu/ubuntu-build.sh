@@ -71,25 +71,15 @@ else
 fi
 
 # --- 3. DMS core ----------------------------------------------------------
-if [ -x "$PREFIX/bin/dms" ]; then
-  say "DMS already present at $PREFIX/bin/dms"
-else
-  say "Building DankMaterialShell core (Go)…"
-  if ! have go; then
-    say "Installing Go $GO_VERSION (user-local)…"
-    curl -fsSL -o "$BUILD_DIR/go.tar.gz" \
-      "https://dl.google.com/go/go${GO_VERSION}.linux-amd64.tar.gz" || die "Go download failed"
-    rm -rf "$BUILD_DIR/go"
-    tar -C "$BUILD_DIR" -xzf "$BUILD_DIR/go.tar.gz" || die "Go extract failed"
-    export PATH="$BUILD_DIR/go/bin:$PATH"
-  fi
-  dms_src="$BUILD_DIR/DankMaterialShell"
-  [ -d "$dms_src/.git" ] || git clone --depth 1 --recurse-submodules \
-    https://github.com/AvengeMedia/DankMaterialShell.git "$dms_src" \
-    || die "DMS clone failed"
-  ( cd "$dms_src" && make -C core build ) || die "DMS build failed"
-  install -m 0755 "$dms_src/core/bin/dms" "$PREFIX/bin/dms" || die "DMS install failed"
-fi
+# Delegated to the shared pinned build so Ubuntu and Debian get the identical
+# embedded shell. The motion/glow overlay (configs/dms/shell-overlay) is
+# coupled to that shell tree, so the pin matters.
+say "Building DankMaterialShell (pinned; see scripts/source/dms-build.sh)…"
+OMINTY_REPO_DIR="$REPO_DIR" \
+OMINTY_PREFIX="$PREFIX" \
+OMINTY_BUILD_DIR="$BUILD_DIR" \
+OMINTY_GO_VERSION="$GO_VERSION" \
+  bash "$REPO_DIR/scripts/source/dms-build.sh" || die "DMS build failed"
 
 # --- 4. matugen -----------------------------------------------------------
 if [ -x "$PREFIX/bin/matugen" ]; then

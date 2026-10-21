@@ -1,0 +1,584 @@
+#!/usr/bin/env python3
+"""Piper TTS System Tray Indicator (dual-mode: X11 StatusIcon + Wayland SNI)
+
+States: idle → processing → ready → playing ⇄ paused → done → idle
+
+IPC: reads /tmp/piper_status.json (written by piper-daemon)
+Audio: GStreamer playbin for playback with pause/resume/rewind
+Icons: cairo-rendered.
+
+Tray backends:
+  * X11 (Cinnamon)  -> Gtk.StatusIcon (XEmbed). Cinnamon's systray is XEmbed
+                       only, so this is the only thing it can show.
+  * Wayland (Niri)  -> StatusNotifierItem via AyatanaAppIndicator3. Niri has
+                       no XEmbed tray; the DMS bar's systemTray widget is a
+                       Quickshell SNI tray, so the indicator must speak SNI
+                       to appear there.
+
+The backend is chosen at startup from WAYLAND_DISPLAY, so the same script
+works unchanged in both sessions.
+"""
+
+import os as _os
+import sys as _sys
+
+# The Ayatana AppIndicator typelib is supplied under ~/.local/opt (installed
+# without root). LD_LIBRARY_PATH is read by the dynamic loader at process
+# start, so re-exec once with it set; this keeps the script self-contained
+# whether it is started by niri, systemd, or a shell.
+_AYATANA_LIB = _os.path.expanduser(
+    "~/.local/opt/ayatana-appindicator/usr/lib/x86_64-linux-gnu")
+if (not _os.environ.get("PIPER_TTS_AYATANA_ENV")
+        and _os.path.isdir(_os.path.join(_AYATANA_LIB, "girepository-1.0"))):
+    _os.environ["PIPER_TTS_AYATANA_ENV"] = "1"
+    _ld = _os.environ.get("LD_LIBRARY_PATH", "")
+    _os.environ["LD_LIBRARY_PATH"] = _AYATANA_LIB + (":" + _ld if _ld else "")
+    _tp = _os.environ.get("GI_TYPELIB_PATH", "")
+    _os.environ["GI_TYPELIB_PATH"] = _os.path.join(
+        _AYATANA_LIB, "girepository-1.0") + (":" + _tp if _tp else "")
+    _os.execv(_sys.executable, [_sys.executable] + _sys.argv)
+
+try:
+    import gi
+    gi.require_version('Gtk', '3.0')
+    gi.require_version('Gdk', '3.0')
+    gi.require_version('Gst', '1.0')
+    from gi.repository import Gtk, GLib, Gdk, Gst, GdkPixbuf, Pango
+except (ImportError, ValueError) as _exc:
+    # TTS is optional: without the GTK/GStreamer typelibs the indicator simply
+    # does not appear, rather than failing the Niri startup entry.
+    print(
+        "piper-indicator: GTK/GStreamer typelibs unavailable "
+        f"({_exc}); run scripts/tts/setup-piper.sh (TTS stays disabled).",
+        file=_sys.stderr,
+    )
+    _sys.exit(0)
+
+import json
+import os
+import math
+import sys
+import fcntl
+import tempfile
+
+
+STATUS_FILE = '/tmp/piper_status.json'
+AUDIO_OUTPUT = '/tmp/piper_output.wav'
+POLL_INTERVAL_MS = 300  # How often we check status file
+AUTO_IDLE_DELAY_MS = 5000  # After playback ends, return to idle
+LOCK_FILE = '/tmp/piper_indicator.lock'
+ICON_CACHE = os.path.join(tempfile.gettempdir(), 'piper-indicator-icons')
+
+# --- Single instance -----------------------------------------------------
+# The daemon and indicator both auto-play audio, so only one indicator may
+# run system-wide (two would double-play every selection). flock releases
+# automatically when the process exits, so a later session can take over.
+_lock_fd = open(LOCK_FILE, 'w')
+try:
+    fcntl.flock(_lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+except OSError:
+    print('Another piper-indicator is already running; exiting.', file=sys.stderr)
+    sys.exit(0)
+
+
+class IconRenderer:
+    """Renders icons to GdkPixbuf via cairo (shared by both backends)."""
+
+    SIZE = 22
+
+    @classmethod
+    def circle(cls, r, g, b, a=1.0):
+        """Solid filled circle."""
+        size = cls.SIZE
+        surface = cairo.ImageSurface(cairo.FORMAT_ARGB32, size, size)
+        cr = cairo.Context(surface)
+        cr.arc(size / 2, size / 2, size / 2 - 2, 0, 2 * math.pi)
+        cr.set_source_rgba(r, g, b, a)
+        cr.fill()
+        return Gdk.pixbuf_get_from_surface(surface, 0, 0, size, size)
+
+    @classmethod
+    def play_triangle(cls):
+        """Blue play triangle."""
+        size = cls.SIZE
+        surface = cairo.ImageSurface(cairo.FORMAT_ARGB32, size, size)
+        cr = cairo.Context(surface)
+        cr.move_to(5, 3)
+        cr.line_to(5, size - 3)
+        cr.line_to(size - 3, size / 2)
+        cr.close_path()
+        cr.set_source_rgba(0.2, 0.5, 1.0, 1.0)  # blue
+        cr.fill()
+        return Gdk.pixbuf_get_from_surface(surface, 0, 0, size, size)
+
+    @classmethod
+    def pause_bars(cls):
+        """Blue pause || bars."""
+        size = cls.SIZE
+        surface = cairo.ImageSurface(cairo.FORMAT_ARGB32, size, size)
+        cr = cairo.Context(surface)
+        gap = 3
+        bar_w = (size - 3 * gap) / 2
+        cr.rectangle(gap, gap, bar_w, size - 2 * gap)
+        cr.rectangle(gap * 2 + bar_w, gap, bar_w, size - 2 * gap)
+        cr.set_source_rgba(0.2, 0.5, 1.0, 1.0)
+        cr.fill()
+        return Gdk.pixbuf_get_from_surface(surface, 0, 0, size, size)
+
+    @classmethod
+    def stop_square(cls):
+        """Red stop square."""
+        size = cls.SIZE
+        surface = cairo.ImageSurface(cairo.FORMAT_ARGB32, size, size)
+        cr = cairo.Context(surface)
+        margin = 4
+        cr.rectangle(margin, margin, size - 2 * margin, size - 2 * margin)
+        cr.set_source_rgba(0.8, 0.2, 0.2, 1.0)
+        cr.fill()
+        return Gdk.pixbuf_get_from_surface(surface, 0, 0, size, size)
+
+    @classmethod
+    def check(cls):
+        """Green checkmark."""
+        size = cls.SIZE
+        surface = cairo.ImageSurface(cairo.FORMAT_ARGB32, size, size)
+        cr = cairo.Context(surface)
+        cr.set_line_width(3)
+        cr.set_line_cap(cairo.LineCap.ROUND)
+        cr.set_source_rgba(0.0, 0.7, 0.0, 1.0)
+        cr.move_to(4, 12)
+        cr.line_to(9, 17)
+        cr.line_to(18, 6)
+        cr.stroke()
+        return Gdk.pixbuf_get_from_surface(surface, 0, 0, size, size)
+
+
+class IconHost:
+    """Abstract tray icon host. Two backends: X11 StatusIcon and Wayland SNI."""
+
+    def set_icon(self, key):
+        raise NotImplementedError
+
+    def set_tooltip(self, text):
+        raise NotImplementedError
+
+    def set_visible(self, visible):
+        raise NotImplementedError
+
+    def set_menu(self, menu):
+        raise NotImplementedError
+
+    def connect_activate(self, cb):
+        """Left-click handler (best effort; SNI may not expose it)."""
+        raise NotImplementedError
+
+    def connect_popup(self, cb):
+        """Right-click handler (no-op for SNI, which shows the menu itself)."""
+        raise NotImplementedError
+
+
+class StatusIconHost(IconHost):
+    """X11/Cinnamon: legacy Gtk.StatusIcon (XEmbed)."""
+
+    def __init__(self, icons):
+        self.icons = icons
+        self.icon = Gtk.StatusIcon()
+        self.icon.set_title('Piper TTS')
+        self.icon.set_name('piper-indicator')
+        self.icon.set_visible(True)
+
+    def set_icon(self, key):
+        pb = self.icons.get(key)
+        if pb:
+            self.icon.set_from_pixbuf(pb)
+
+    def set_tooltip(self, text):
+        self.icon.set_tooltip_text(text)
+
+    def set_visible(self, visible):
+        self.icon.set_visible(visible)
+
+    def set_menu(self, menu):
+        pass  # StatusIcon shows the menu via the popup-menu signal
+
+    def connect_activate(self, cb):
+        self.icon.connect('activate', cb)
+
+    def connect_popup(self, cb):
+        self.icon.connect('popup-menu', cb)
+
+
+class SniHost(IconHost):
+    """Wayland/Niri: StatusNotifierItem via AyatanaAppIndicator3 (DMS tray).
+
+    libayatana-appindicator addresses icons by *name* through an icon theme,
+    so the cairo pixbufs are exported to a cache dir once and referenced by
+    name (piper-<state>.png).
+    """
+
+    def __init__(self, icons):
+        self.icons = icons
+        self._export_theme()
+        self.ind = AyatanaAppIndicator3.Indicator.new(
+            'piper-indicator', 'piper-green',
+            AyatanaAppIndicator3.IndicatorCategory.APPLICATION_STATUS)
+        self.ind.set_icon_theme_path(ICON_CACHE)
+        self.ind.set_status(AyatanaAppIndicator3.IndicatorStatus.ACTIVE)
+
+    def _export_theme(self):
+        os.makedirs(ICON_CACHE, exist_ok=True)
+        for key, pb in self.icons.items():
+            path = os.path.join(ICON_CACHE, 'piper-%s.png' % key)
+            pb.savev(path, 'png', [], [])
+
+    def set_icon(self, key):
+        if key in self.icons:
+            self.ind.set_icon('piper-%s' % key)
+
+    def set_tooltip(self, text):
+        self.ind.set_title(text)
+
+    def set_visible(self, visible):
+        self.ind.set_status(
+            AyatanaAppIndicator3.IndicatorStatus.ACTIVE if visible
+            else AyatanaAppIndicator3.IndicatorStatus.PASSIVE)
+
+    def set_menu(self, menu):
+        self.ind.set_menu(menu)
+
+    def connect_activate(self, cb):
+        try:
+            self.ind.connect('activate', cb)
+        except Exception:
+            pass  # not exposed in this build; the menu covers play/pause/stop
+
+    def connect_popup(self, cb):
+        pass  # SNI trays show the attached menu on right-click themselves
+
+
+class PiperIndicator:
+    """System tray indicator for Piper TTS with playback control."""
+
+    def __init__(self):
+        Gst.init(None)
+
+        # --- Pre-render icons ---
+        self.icons = {
+            'green':      IconRenderer.circle(0.0, 0.7, 0.0, 1.0),
+            'orange':     IconRenderer.circle(1.0, 0.6, 0.0, 1.0),
+            'orange_dim': IconRenderer.circle(1.0, 0.6, 0.0, 0.3),
+            'play':       IconRenderer.play_triangle(),
+            'pause':      IconRenderer.pause_bars(),
+            'stop':       IconRenderer.stop_square(),
+            'check':      IconRenderer.check(),
+        }
+
+        # --- Pick the tray backend for this session ---
+        if os.environ.get('WAYLAND_DISPLAY'):
+            gi.require_version('AyatanaAppIndicator3', '0.1')
+            global AyatanaAppIndicator3
+            from gi.repository import AyatanaAppIndicator3
+            self.host = SniHost(self.icons)
+        else:
+            self.host = StatusIconHost(self.icons)
+
+        self.host.set_tooltip('Piper TTS — Ready')
+
+        # --- Context Menu (right-click) ---
+        self.menu = Gtk.Menu()
+
+        self.state_item = Gtk.MenuItem(label='Ready')
+        self.state_item.set_sensitive(False)
+        self.menu.append(self.state_item)
+
+        self.action_item = Gtk.MenuItem(label='Play')
+        self.action_item.connect('activate', self.on_menu_action)
+        self.menu.append(self.action_item)
+
+        self.stop_item = Gtk.MenuItem(label='Stop')
+        self.stop_item.connect('activate', self.on_stop)
+        self.menu.append(self.stop_item)
+
+        self.status_item = Gtk.MenuItem(label='')
+        self.status_item.set_sensitive(False)
+        self.menu.append(self.status_item)
+
+        self.menu.append(Gtk.SeparatorMenuItem())
+
+        quit_item = Gtk.MenuItem(label='Quit')
+        quit_item.connect('activate', self.quit)
+        self.menu.append(quit_item)
+
+        self.menu.show_all()
+        self.host.set_menu(self.menu)
+        self.host.connect_activate(self.on_click)
+        self.host.connect_popup(self.on_popup_menu)
+
+        # --- GStreamer Player ---
+        self.player = Gst.ElementFactory.make('playbin', 'player')
+        self.bus = self.player.get_bus()
+        self.bus.add_signal_watch()
+        self.bus.connect('message::eos', self._on_bus_eos)
+        self.bus.connect('message::error', self._on_bus_error)
+        self.bus.connect('message::state-changed', self._on_bus_state_changed)
+
+        # --- State ---
+        self.state = 'idle'          # idle|processing|ready|playing|paused|done
+        self.audio_file = None
+        self.flash_timer_id = None
+        self.auto_idle_timer_id = None
+        self.flash_on = False
+
+        # Last known status content (for change detection)
+        self._last_status = ''
+
+        # Poll status file
+        GLib.timeout_add(POLL_INTERVAL_MS, self._poll_status)
+
+        # Set initial icon
+        self._set_state('idle')
+
+    # ── Icon / State helpers ──────────────────────────────────────────
+
+    def _set_icon(self, key):
+        self.host.set_icon(key)
+
+    def _clear_flash(self):
+        if self.flash_timer_id is not None:
+            GLib.source_remove(self.flash_timer_id)
+            self.flash_timer_id = None
+
+    def _clear_auto_idle(self):
+        if self.auto_idle_timer_id is not None:
+            GLib.source_remove(self.auto_idle_timer_id)
+            self.auto_idle_timer_id = None
+
+    def _set_state(self, new_state, audio_file=None):
+        """Transition the state machine and update UI accordingly."""
+        self.state = new_state
+        if audio_file:
+            self.audio_file = audio_file
+
+        # Clear timers that no longer apply
+        self._clear_flash()
+        self._clear_auto_idle()
+
+        # --- Update icon ---
+        if new_state == 'idle':
+            self._set_icon('green')
+            self.host.set_tooltip('Piper TTS — Ready')
+            self.state_item.set_label('Ready')
+            self.action_item.set_label('Play')
+            self.action_item.set_sensitive(False)
+            self.stop_item.set_sensitive(False)
+            self.status_item.set_label('')
+            self.status_item.set_sensitive(False)
+
+        elif new_state == 'processing':
+            self.host.set_tooltip('Piper TTS — Generating speech…')
+            self.state_item.set_label('Generating speech…')
+            self.action_item.set_label('Play')
+            self.action_item.set_sensitive(False)
+            self.stop_item.set_sensitive(False)
+            self.status_item.set_label('')
+            self.status_item.set_sensitive(False)
+            # Start flashing
+            self.flash_on = False
+            self.flash_timer_id = GLib.timeout_add(600, self._flash_tick)
+
+        elif new_state == 'ready':
+            self.host.set_tooltip('Piper TTS — Ready to play')
+            self.state_item.set_label('Ready to play')
+            self.action_item.set_label('Play')
+            self.action_item.set_sensitive(True)
+            self.stop_item.set_sensitive(True)
+            self.status_item.set_label('')
+            self.status_item.set_sensitive(False)
+            self._set_icon('play')
+
+        elif new_state == 'playing':
+            self.host.set_tooltip('Piper TTS — Playing (click to pause)')
+            self.state_item.set_label('Playing')
+            self.action_item.set_label('Pause')
+            self.action_item.set_sensitive(True)
+            self.stop_item.set_sensitive(True)
+            self.status_item.set_label('')
+            self.status_item.set_sensitive(False)
+            self._set_icon('pause')
+
+        elif new_state == 'paused':
+            self.host.set_tooltip('Piper TTS — Paused (click to resume)')
+            self.state_item.set_label('Paused')
+            self.action_item.set_label('Resume')
+            self.action_item.set_sensitive(True)
+            self.stop_item.set_sensitive(True)
+            self.status_item.set_label('')
+            self.status_item.set_sensitive(False)
+            self._set_icon('play')
+
+        elif new_state == 'done':
+            self.host.set_tooltip('Piper TTS — Done')
+            self.state_item.set_label('Done')
+            self.action_item.set_label('Play')
+            self.action_item.set_sensitive(False)
+            self.stop_item.set_sensitive(False)
+            self.status_item.set_label('')
+            self.status_item.set_sensitive(False)
+            self._set_icon('check')
+
+        # Auto-return to idle after delay when done
+        if new_state == 'done':
+            self.auto_idle_timer_id = GLib.timeout_add(AUTO_IDLE_DELAY_MS, self._auto_idle)
+
+    def _flash_tick(self):
+        self.flash_on = not self.flash_on
+        self._set_icon('orange' if self.flash_on else 'orange_dim')
+        return True  # keep timer running
+
+    def _auto_idle(self):
+        if self.state == 'done':
+            self._set_state('idle')
+        return False
+
+    # ── Status file polling (IPC from piper-daemon) ──────────────────
+
+    def _poll_status(self):
+        """Periodically check status file written by piper-daemon."""
+        try:
+            with open(STATUS_FILE) as f:
+                content = f.read().strip()
+            if content and content != self._last_status:
+                self._last_status = content
+                data = json.loads(content)
+                self._handle_status(data)
+        except (FileNotFoundError, json.JSONDecodeError):
+            pass
+        return True
+
+    def _handle_status(self, data):
+        """Process a status update from piper-daemon."""
+        s = data.get('state', '')
+
+        if s == 'processing' and self.state in ('idle', 'ready', 'done'):
+            self._set_state('processing')
+
+        elif s == 'ready':
+            af = data.get('audio_file', '')
+            if not af or not os.path.exists(af):
+                return
+            if self.state == 'processing':
+                # Daemon just finished generating — auto-play
+                self.audio_file = af
+                self._play()
+            elif self.state in ('idle', 'done'):
+                # Cold start — show play button, don't auto-play
+                self._set_state('ready', af)
+
+    # ── Playback Control (via GStreamer) ──────────────────────────────
+
+    def _play(self):
+        if not self.audio_file or not os.path.exists(self.audio_file):
+            self._set_state('idle')
+            return
+        uri = 'file://' + os.path.abspath(self.audio_file)
+        self.player.set_property('uri', uri)
+        self.player.set_state(Gst.State.PLAYING)
+        self._set_state('playing')
+
+    def _pause(self):
+        if self.state == 'playing':
+            self.player.set_state(Gst.State.PAUSED)
+            self._set_state('paused')
+
+    def _resume(self):
+        if self.state == 'paused' and self.audio_file:
+            self.player.set_state(Gst.State.PLAYING)
+            # Rewind 2 seconds (short delay to let pipeline start)
+            GLib.timeout_add(150, self._do_rewind)
+
+    def _do_rewind(self):
+        """Seek back 2 seconds from current position."""
+        try:
+            success, pos = self.player.query_position(Gst.Format.TIME)
+            if success:
+                new_pos = max(0, pos - 2 * Gst.SECOND)
+                self.player.seek_simple(Gst.Format.TIME, Gst.SeekFlags.FLUSH, new_pos)
+        except Exception:
+            pass
+        self._set_state('playing')
+        return False
+
+    def _stop(self):
+        self.player.set_state(Gst.State.NULL)
+        self._set_state('idle')
+
+    # ── GStreamer Bus Messages ───────────────────────────────────────
+
+    def _on_bus_eos(self, bus, msg):
+        """End of stream — playback finished."""
+        self.player.set_state(Gst.State.NULL)
+        self._set_state('done')
+
+    def _on_bus_error(self, bus, msg):
+        """Playback error."""
+        self.player.set_state(Gst.State.NULL)
+        self._set_state('done')
+
+    def _on_bus_state_changed(self, bus, msg):
+        """Handle transition to PLAYING after we set it from _resume (seek-safe)."""
+        pass
+
+    # ── User Interaction ─────────────────────────────────────────────
+
+    def on_click(self, icon):
+        """Left-click on tray icon."""
+        if self.state == 'ready':
+            self._play()
+        elif self.state == 'playing':
+            self._pause()
+        elif self.state == 'paused':
+            self._resume()
+        elif self.state == 'done':
+            self._set_state('idle')
+
+    def on_popup_menu(self, icon, button, timestamp):
+        """Right-click → show context menu (StatusIcon backend only)."""
+        self.menu.popup(None, None, None, None, button, timestamp)
+
+    def on_menu_action(self, item):
+        """Menu Play/Pause/Resume action."""
+        if self.state == 'ready':
+            self._play()
+        elif self.state == 'playing':
+            self._pause()
+        elif self.state == 'paused':
+            self._resume()
+
+    def on_stop(self, item):
+        """Menu Stop action."""
+        self._stop()
+
+    # ── Lifecycle ────────────────────────────────────────────────────
+
+    def quit(self, *args):
+        self.player.set_state(Gst.State.NULL)
+        self._clear_flash()
+        self._clear_auto_idle()
+        Gtk.main_quit()
+
+    def run(self):
+        Gtk.main()
+
+
+# ── Main ────────────────────────────────────────────────────────────────
+
+if __name__ == '__main__':
+    # Ensure GStreamer and cairo are importable
+    try:
+        import cairo
+    except ImportError:
+        print("ERROR: python3-cairo not installed. Install with: sudo apt install python3-cairo", file=sys.stderr)
+        sys.exit(1)
+
+    indicator = PiperIndicator()
+    indicator.run()

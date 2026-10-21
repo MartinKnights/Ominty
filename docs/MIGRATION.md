@@ -7,9 +7,10 @@ printed; the feature simply does not appear. This document records what has to
 be carried across, and the traps that cost us time.
 
 Validated on a Dell Precision T7910 running Linux Mint 22.3 (Ubuntu family),
-Niri 26.04 and DMS/Quickshell 0.3.1. Ubuntu-family systems are an
-**experimental** target (see [UBUNTU.md](UBUNTU.md)); the same migration applies
-to LMDE 7.
+Niri 26.04 and DMS/Quickshell 0.3.1, and on LMDE 7 "gigi" (Debian 13). Both
+families are supported: DMS is built from the same pinned source commit on
+each, so the shell overlay, motion and glow behave identically (see
+[UBUNTU.md](UBUNTU.md) and [INSTALL.md](INSTALL.md)).
 
 > The migration rule is the same as the installation rule: **infer, then
 > confirm.** Detect what the user has in Cinnamon, propose the Niri equivalent,
@@ -140,23 +141,32 @@ Niri reads only its own `binds { }` block. **Niri never reads dconf**, so every
 script shortcut silently disappears unless it is re-declared.
 
 The reference machine had four custom bindings; all four now exist in both
-sessions:
+sessions. The helper scripts are **shipped in this repository** (`configs/bin`,
+`configs/local-bin`, `configs/Scripts`) and deployed to `~/bin`,
+`~/.local/bin` and `~/Scripts` by `install.sh`, so they are present on a fresh
+machine:
 
 | Cinnamon name | Chord | Command |
 | --- | --- | --- |
-| Script Command Centre | `Super+S` | `/home/martin/Scripts/script_command_centre.sh` |
-| Read Selection | `Ctrl+Alt+S` | `/home/martin/bin/read-selection` |
-| Artha Dictionary | `Ctrl+Alt+A` | `/home/martin/bin/artha-word` (wrapper: bridges the selection to X11 for Artha) |
-| Screen OCR | `Ctrl+Alt+R` | `/home/martin/.local/bin/screen-ocr` |
+| Script Command Centre | `Super+S` | `~/Scripts/script_command_centre.sh` |
+| Read Selection | `Ctrl+Alt+S` | `~/bin/read-selection` |
+| Artha Dictionary | `Ctrl+Alt+A` | `~/bin/artha-word` (wrapper: bridges the selection to X11 for Artha) |
+| Screen OCR | `Ctrl+Alt+R` | `~/.local/bin/screen-ocr` |
+| Read document aloud | `Ctrl+Alt+O` | `~/bin/tts-pick` (TTS layer) |
+| Read document aloud | `Mod+Alt+O` | `~/bin/tts-pick` (TTS layer) |
 
 ```kdl
 binds {
-    Mod+S       { spawn "/home/martin/Scripts/script_command_centre.sh"; }
-    Ctrl+Alt+S  { spawn "/home/martin/bin/read-selection"; }
-    Ctrl+Alt+A  { spawn "/usr/bin/artha"; }
-    Ctrl+Alt+R  { spawn "/home/martin/.local/bin/screen-ocr"; }
+    Mod+S       { spawn "__HOME__/Scripts/script_command_centre.sh"; }
+    Ctrl+Alt+S  { spawn "__HOME__/bin/read-selection"; }
+    Ctrl+Alt+A  { spawn "__HOME__/bin/artha-word"; }
+    Ctrl+Alt+R  { spawn "__HOME__/.local/bin/screen-ocr"; }
+    Ctrl+Alt+O  { spawn "__HOME__/bin/tts-pick"; }
+    Mod+Alt+O   { spawn "__HOME__/bin/tts-pick"; }
 }
 ```
+
+(`install.sh` renders `__HOME__` when it deploys the file.)
 
 Put these in the **user-owned** part of `config.kdl`, not in the DMS or
 Ominty-generated fragments — those are regenerated and would drop them.
