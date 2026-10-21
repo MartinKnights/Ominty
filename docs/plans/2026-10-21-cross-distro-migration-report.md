@@ -545,7 +545,26 @@ its QML moved to `DCommon/` — so the OBS package is no longer installed.
 | `apply.sh` on an incompatible build | refuses, fork not created |
 | `./install.sh --dry-run --layers "desktop tts"` | plans build, overlay, scripts, symlinks, unit |
 
-### 13.5 Remaining caveats
+### 13.5 Upgrading an existing clone (the laptop)
+
+`.gitmodules` moved from SSH to HTTPS. An existing clone keeps the old URL in
+`.git/config`, so `submodule update` would still try SSH — run `submodule sync`
+first:
+
+```sh
+cd ~/Ominty
+git pull
+git submodule sync --recursive
+git submodule update --init --recursive
+./ominty-core/cli/ominty inspect     # expect support_level: validated
+./install.sh --dry-run               # review the 54-step plan
+./install.sh
+```
+
+Verified end to end from a fresh keyless HTTPS clone and from a clone whose
+submodule URL was still SSH.
+
+### 13.6 Remaining caveats
 
 - The laptop keeps its old `dms` package on disk (if it had one). It is
   harmless: the user unit runs `~/.local/bin/dms`. Removing the package is

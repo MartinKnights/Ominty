@@ -227,6 +227,9 @@ when the wallpaper changes.
 
 ```sh
 git -C Ominty pull
+# .gitmodules now uses HTTPS; sync an older clone that still points the
+# submodule at git@github.com (otherwise update tries SSH and needs a key).
+git -C Ominty submodule sync --recursive
 git -C Ominty submodule update --init --recursive
 ./install.sh        # re-run; configs are backed up and replaced
 ```
