@@ -1,7 +1,8 @@
 # Cross-distro migration report — DMS overlay, niri glow, TTS
 
 **Date:** 2026-10-21
-**Status:** Proposal (no code changed for this report)
+**Status:** Implemented — `ominty-core` `21c0fb4` (assessment) and the `Ominty`
+installer/systemd/docs slice. Remaining open items are listed in §11.
 **Source commits:** `Ominty` `914e8ea` · `ominty-core` `23a8d76`
 **Targets:** Debian 13 / LMDE 7 (validated) and Ubuntu-family: Ubuntu 24.04
 `noble`, Mint 22.x, Ubuntu 25.10/26.04 (source-build or PPA path)
@@ -330,7 +331,7 @@ support reproducible.
 
 ---
 
-## 7. Proposed `inspect` schema additions (v2 draft)
+## 7. Proposed `inspect` schema additions (delivered additively; `schema_version` stays 1)
 
 ```json
 {
@@ -383,9 +384,10 @@ breaking changes, agent ignores unknown keys.
 ## 9. Sequencing
 
 1. **`ominty-core` first** — assessment correctness is a prerequisite:
-   D1/D3 fixes, `build` source, TTS layer, new choices, schema v2.
+   D1/D3 fixes, TTS layer, new config checks, new choices, `desktop`/`tts`
+   sections (all additive, so the schema stays version 1).
 2. **`Ominty` second** — submodule bump + `apply.sh --check` + drop-in +
-   TTS scripts + docs.
+   installer wiring + docs. (Shippable TTS helper scripts remain open, §11.)
 3. Tag both (`v0.x`) so the two machines can pin the same release.
 4. Roll out to the Debian reference first (validated path), then the
    workstation (source-build path), then document the diff.
@@ -426,3 +428,38 @@ Rollback is always: remove the drop-in (or `DMS_SHELL_DIR`), restore the
 5. Do we need a per-distro `packages/` layout (niri `.deb` built for noble),
    or is the current bundled Debian build + libdisplay-info workaround
    acceptable for the next release?
+
+---
+
+## 12. Implemented in this slice
+
+`ominty-core` (`21c0fb4`) — assessment:
+
+- [x] D1 `is_lmde` derived from family (`mint-debian` only).
+- [x] D3 Ubuntu base validated via `UBUNTU_CODENAME`; unknown bases warn.
+- [x] `platform.desktop_source` (`obs` / `ppa` / `source` / `none`).
+- [x] Optional `tts` layer (Ayatana typelib, GTK/GStreamer); optional layers
+      warn and never block.
+- [x] `desktop` section (dms/niri/matugen versions, `custom_shader`, fork path,
+      overlay state + base build, theme fragment).
+- [x] `tts` section (indicator/daemon, running, typelib system/user/missing,
+      voices).
+- [x] New config checks: matugen theme fragment, DMS shell fork.
+- [x] New choices: `desktop.shell_overlay`, `tts.enabled`.
+- [x] Schema stays version 1 — all additions are additive.
+
+`Ominty` — installer and delivery:
+
+- [x] `apply.sh --check` (read-only, verifies against a throwaway copy) and a
+      `.ominty-overlay.json` marker recording the base build.
+- [x] `configs/systemd/dms.service.d/ominty-shell.conf` drop-in; the full
+      `dms.service` no longer carries `DMS_SHELL_DIR`.
+- [x] `install.sh`: `--check` gate, drop-in rendered only on a matching build
+      (removed otherwise), `daemon-reload` on both families, `tts` in the
+      default layer set.
+- [x] D2: `docs/UBUNTU.md` now says “supported via source build (`noble`)”.
+- [x] Docs: `INSPECT.md`, `INSTALL.md`, `UBUNTU.md`, `MIGRATION.md`.
+
+Not in this slice: shipping the Piper helper scripts (`configs/tts/bin`),
+the `build` package source for source-built desktop tools, and the per-distro
+`packages/` layout.

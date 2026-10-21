@@ -41,7 +41,8 @@ The installer is **idempotent** — re-running it is safe. It will:
    ensure `trixie-backports` is enabled, and pin `quickshell` to Debian's build.
 2. Install system packages via `apt`: `quickshell` (trixie-backports), plus
    pipewire, xwayland, portals, `fuzzel`, terminals, browser, and file manager
-   from Debian.
+   from Debian. The optional `tts` layer adds the Ayatana tray typelib, Python
+   GI bindings and the GStreamer plugins used by the Piper indicator.
 3. Install **DMS**, **matugen**, and **ghostty** from the AvengeMedia Open
    Build Service (they are not in Debian).
 4. Install **Niri** and **xwayland-satellite** from the prebuilt `.deb`s in
@@ -56,10 +57,39 @@ The installer is **idempotent** — re-running it is safe. It will:
 10. Install the DMS plugins (Ominty Actions, Ominty Keybinds, and the
     third-party set: dankHooks, dankKDEConnect, dankLauncherKeys,
     quickCapture, wallpaperCarousel).
-11. Validate the registry and the Niri config.
+11. If DMS has already unpacked its shell, verify and apply the Ominty
+    motion + accent-glow overlay, then write the `dms.service` drop-in that
+    points DMS at the fork. On a fresh install this step is skipped (DMS has
+    not run yet) and can be re-run later — see *DMS shell overlay* below.
+12. Validate the registry and the Niri config.
 
 Existing configuration files are backed up with a
 `.bak-ominty-<timestamp>` suffix before being replaced.
+
+### DMS shell overlay
+
+DMS embeds its QML shell in the `dms` binary and unpacks it on first start.
+The motion + accent-glow overlay therefore needs that unpacked tree:
+
+```sh
+configs/dms/shell-overlay/apply.sh --check   # does it match this DMS build?
+configs/dms/shell-overlay/apply.sh           # rebuild the fork from pristine
+```
+
+`--check` is read-only and exits `1` when the patch does not match. `apply.sh`
+verifies against a temporary copy first, so a mismatched build is never left
+half-patched. On success it records the base build in
+`~/.local/share/dms-shell/.ominty-overlay.json`, which `ominty inspect`
+reports as `desktop.shell_overlay.base`.
+
+The fork is activated by the drop-in
+`~/.config/systemd/user/dms.service.d/ominty-shell.conf` (installed
+automatically). It sets `DMS_SHELL_DIR`, and works on both Debian (packaged
+unit) and Ubuntu (source-built unit). Rolling back means deleting that drop-in
+and restarting `dms.service`.
+
+Re-run `apply.sh` after every DMS upgrade: the unpacked build id changes and
+the old fork no longer matches.
 
 ### Third-party repositories
 
@@ -86,6 +116,7 @@ keyrings in `/etc/apt/keyrings/`.
 | Flag | Effect |
 |---|---|
 | `--profile surface-book-1` | Apply the Surface Book 1 hardware profile (2× scale output, dGPU script). |
+| `--layers "desktop tts terminal editor cli containers browser"` | Choose which layers to install. `tts` is optional; drop it to skip the read-aloud stack. |
 | `--no-plugins` | Skip the DMS plugin installation step. |
 | `--help` | Show usage. |
 
@@ -101,7 +132,12 @@ keyrings in `/etc/apt/keyrings/`.
 ominty registry validate        # 44 action(s), 0 error(s), 0 warning(s)
 niri validate -c ~/.config/niri/config.kdl   # config is valid
 systemctl --user is-active dms   # active
+ominty inspect                   # platform, desktop and tts state
 ```
+
+`ominty inspect` should report the right `family`/`is_lmde` for this host, and
+`Desktop:` should show the overlay as `applied` once `apply.sh` has run. A
+`TTS:` line reports the indicator and typelib state; both are optional.
 
 Then exercise the surfaces:
 
@@ -110,6 +146,8 @@ Then exercise the surfaces:
 - `Super+Shift+S` — cheat sheet (GKS)
 - `Super+A` — AI menu
 - `Super+X` — power menu (Restart Audio / Restart Network / Reload Niri)
+- `Ctrl+Alt+S` — read the current selection aloud (TTS layer)
+- `Ctrl+Alt+O` — open the TTS document picker (TTS layer)
 
 ## 5. AI setup (optional)
 
@@ -145,6 +183,19 @@ git -C Ominty submodule update --init --recursive
 ./install.sh        # re-run; configs are backed up and replaced
 ```
 
+If `dms` was upgraded, re-apply the shell overlay so the fork matches the new
+build:
+
+```sh
+configs/dms/shell-overlay/apply.sh --check   # expect: state: applicable
+configs/dms/shell-overlay/apply.sh
+systemctl --user daemon-reload && systemctl --user restart dms.service
+```
+
+If `--check` reports `not-applicable`, DMS changed the files the patch touches.
+`install.sh` leaves the stock shell running in that case; update
+`dms-shell.patch` before re-applying.
+
 ## Uninstall
 
 There is no automated uninstaller yet. To remove:
@@ -152,7 +203,10 @@ There is no automated uninstaller yet. To remove:
 ```sh
 sudo apt remove --purge niri xwayland-satellite quickshell dms matugen ghostty
 rm -rf ~/.config/niri ~/.config/DankMaterialShell ~/.config/ominty
+rm -rf ~/.local/share/dms-shell
+rm -f ~/.config/systemd/user/dms.service.d/ominty-shell.conf
 rm -f ~/.local/bin/ominty ~/.local/bin/ominty-hook
+systemctl --user daemon-reload
 ```
 
 To also drop the APT repositories and keyrings the installer added:

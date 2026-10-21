@@ -65,6 +65,15 @@ survives if the app speaks SNI.
 | **Mullvad VPN** | Qt | **no** |
 | **Update Manager** | XApp (`XApp.StatusIcon`) | **no** |
 
+The Piper indicator only appears when the AyatanaAppIndicator3 typelib is
+present. Apt provides `gir1.2-ayatanaappindicator3-0.1` +
+`libayatana-appindicator3-1` (both Debian 13 and Ubuntu 24.04); they are part
+of the optional `tts` layer, and `install.sh` installs them when that layer is
+selected. Without root, the fallback extracts the packages into
+`~/.local/opt/ayatana-appindicator` and the indicator re-execs with
+`GI_TYPELIB_PATH`/`LD_LIBRARY_PATH` set. `ominty inspect` reports this as
+`tts.typelib` (`system`, `user`, or `missing`).
+
 The Qt-style regressions are a **Quickshell 0.3.1 limitation**, not a
 configuration error. Quickshell receives the registration but fails to load the
 item:
@@ -303,6 +312,31 @@ themselves are path-independent and copied verbatim.
 Verify: change the wallpaper; `~/.config/ominty/theme/palette.json` and
 `~/.config/niri/dms/ominty-theme.kdl` must both update without a restart, and
 `journalctl --user -f` must show no `ShaderCompileError`.
+
+### DMS shell motion and accent glow
+
+DMS embeds its QML shell in the binary and unpacks it to
+`/run/user/$UID/danklinux-shell/<build>/`. That tree is read-only and is
+replaced whenever DMS is upgraded, so Ominty keeps a writable fork at
+`~/.local/share/dms-shell` and points DMS at it with `DMS_SHELL_DIR` via the
+drop-in `~/.config/systemd/user/dms.service.d/ominty-shell.conf`.
+
+The overlay itself (`configs/dms/shell-overlay/dms-shell.patch`) adds accent
+glow plus longer, decelerating motion to DMS modals, popouts, notifications and
+the OSD. Because it patches embedded QML it is **coupled to the DMS build**:
+
+```sh
+configs/dms/shell-overlay/apply.sh --check   # state: applicable | not-applicable
+configs/dms/shell-overlay/apply.sh           # rebuild fork from pristine + patch
+```
+
+`apply.sh` verifies against a temporary copy before replacing the fork, so a
+mismatched build is never half-patched; `install.sh` skips the overlay (and
+removes the drop-in) when `--check` fails. `ominty inspect` reports the state as
+`desktop.shell_overlay` (`applied`/`not-applied`) with the `base` build id.
+
+Roll back by deleting the drop-in and restarting `dms.service`; DMS then uses
+its own unpacked shell again.
 
 ---
 

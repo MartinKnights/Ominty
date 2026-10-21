@@ -1,8 +1,10 @@
-# Ubuntu-family support (experimental)
+# Ubuntu-family support (source build)
 
-Ominty is **validated on LMDE 7 / Debian 13** and runs on **Ubuntu-family**
-systems (Ubuntu, and Linux Mint built on Ubuntu) through a **source-build**
-path. This document is the support matrix and the runbook.
+Ominty is **validated on LMDE 7 / Debian 13**. Ubuntu-family systems (Ubuntu,
+and Linux Mint built on Ubuntu) are **supported through a source-build path**;
+`noble` (Ubuntu 24.04 / Mint 22.x) is the validated base, and other Ubuntu
+codenames are installable but reported as unvalidated. This document is the
+support matrix and the runbook.
 
 > The full migration strategy, including the two-machine process, lives in
 > `Ominty-Migration-Planning.md` (kept with the owner). This file is the
@@ -14,11 +16,13 @@ path. This document is the support matrix and the runbook.
 | --- | --- | --- | --- |
 | `debian` | `ID=debian` | apt + OBS (Debian 13) | validated |
 | `mint-debian` | `ID=linuxmint`, `ID_LIKE=debian` (LMDE) | apt + OBS (Debian 13) | validated |
-| `ubuntu` | `ID=ubuntu` | source build | experimental |
-| `mint-ubuntu` | `ID=linuxmint`, `ID_LIKE="ubuntu debian"` (Mint 22.x) | source build | experimental |
+| `ubuntu` | `ID=ubuntu` | source build | supported (`noble`); other bases unvalidated |
+| `mint-ubuntu` | `ID=linuxmint`, `ID_LIKE="ubuntu debian"` (Mint 22.x) | source build | supported (`noble`); other bases unvalidated |
 | `void` | `ID=void` | — | reserved |
 
-`ominty inspect` reports this as `platform.family` and `platform.support_level`.
+`ominty inspect` reports this as `platform.family`, `platform.support_level`,
+`platform.ubuntu_codename` and `platform.desktop_source`. `is_lmde` is true
+only for `mint-debian`; Ubuntu-based Mint is `mint-ubuntu`.
 
 ## Why Ubuntu needs a source build
 
@@ -32,7 +36,8 @@ path. This document is the support matrix and the runbook.
 
 The AvengeMedia Launchpad PPA (`ppa:avengemedia/danklinux`, `…/dms`) is Ubuntu
 25.10 / 26.04+ only — it has no `noble` (24.04) builds — so Mint 22.x cannot use
-it.
+it. `platform.desktop_source` reflects this: `ppa` when the Launchpad PPA is
+configured, `source` when DMS was built into `~/.local`, `obs` on Debian/LMDE.
 
 ### niri `.deb` gaps on Ubuntu
 
@@ -62,8 +67,8 @@ then continues with the shared steps (deploy configs, `ominty` CLI symlinks,
 Apply with the usual dry run first:
 
 ```sh
-./install.sh --dry-run --layers "desktop terminal editor cli browser"
-./install.sh --layers "desktop terminal editor cli browser"
+./install.sh --dry-run --layers "desktop tts terminal editor cli browser"
+./install.sh --layers "desktop tts terminal editor cli browser"
 ```
 
 The scripts are also runnable on their own and are idempotent. Versions and
@@ -77,13 +82,35 @@ locations are overridable by environment variable:
 | `OMINTY_PREFIX` | `~/.local` |
 | `OMINTY_BUILD_DIR` | `~/.cache/ominty/build` |
 
+### Desktop shell overlay and the systemd drop-in
+
+Ubuntu-family installs write a full `dms.service` (there is no packaged unit),
+but the motion + accent-glow overlay is delivered the same way it is on
+Debian: through `~/.config/systemd/user/dms.service.d/ominty-shell.conf`, which
+sets `DMS_SHELL_DIR`. The drop-in is written only after
+`configs/dms/shell-overlay/apply.sh --check` confirms the patch matches the
+built DMS. A mismatched build leaves the stock shell running and removes any
+stale drop-in.
+
+On a fresh machine DMS has not unpacked its shell yet, so `install.sh` skips
+the overlay. After the first login:
+
+```sh
+configs/dms/shell-overlay/apply.sh
+systemctl --user daemon-reload && systemctl --user restart dms.service
+```
+
+Source-built DMS embeds a build id; `ominty inspect` reports it under
+`desktop.shell_overlay.base`. Re-run `apply.sh` after every DMS rebuild.
+
 ## Known limitations
 
 - The layer manifest in `ominty-core` (`cli/omintylib/inspect.py`) is
   Debian-centric: source-built `quickshell`/`dms`/`matugen` are not seen by
   `dpkg`, so `ominty inspect` reports them as missing on Ubuntu-family. Treat
   the `desktop` layer's package findings on Ubuntu-family as informational
-  until the manifest gains a `build` source.
+  until the manifest gains a `build` source. `platform.desktop_source` already
+  records that the desktop came from a build rather than a package.
 - `ominty` still targets the Debian-first layer set; some optional layer
   packages (e.g. `ghostty`, `firefox-esr`) do not exist on Ubuntu-family and are
   skipped.
@@ -103,4 +130,4 @@ locations are overridable by environment variable:
   dependency script tolerates that.
 - The DMS runtime must acquire `org.freedesktop.Notifications`; the installer
   writes a user `dms.service` that sets `PATH` to include `~/.local/bin` and
-  `OMINTY_CLI`.
+  `OMINTY_CLI`, and the overlay drop-in (see above) sets `DMS_SHELL_DIR`.

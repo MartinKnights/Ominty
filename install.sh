@@ -37,7 +37,7 @@ OMINTY_CLI="$REPO_DIR/ominty-core/cli/ominty"
 # Which layers to install. The manifest in ominty-core is the single source of
 # truth for what each layer contains, so the installer and `ominty inspect`
 # cannot drift apart. Override with --layers.
-LAYERS="desktop terminal editor cli containers browser"
+LAYERS="desktop tts terminal editor cli containers browser"
 
 # Package lists are derived from that manifest rather than duplicated here.
 # `layer_packages <source> [exclude...]` prints required package names.
@@ -355,22 +355,45 @@ else
   "$REPO_DIR/ominty-core/cli/ominty" registry build
 fi
 
-# --- 5b. DMS user service (source builds) -----------------------------------
-# On Debian the dms package ships its own unit; a source build does not, so we
-# --- 5. DMS user service + shell overlay ------------------------------------
-
+# --- 5a. DMS shell overlay (motion + accent glow) ---------------------------
 # DMS embeds its QML shell in the binary and extracts it on first start. The
 # overlay needs that extracted dist, so on a fresh install it is skipped and
-# can be applied after DMS has run once.
-if [ -x "$REPO_DIR/configs/dms/shell-overlay/apply.sh" ]; then
-  if ls /run/user/"$(id -u)"/danklinux-shell/*/ >/dev/null 2>&1; then
-    say "Applying DMS shell overlay (motion + accent glow)..."
-    run "$REPO_DIR/configs/dms/shell-overlay/apply.sh"
-  else
+# can be applied after DMS has run once. --check verifies the patch against
+# the current build before touching anything.
+OVERLAY="$REPO_DIR/configs/dms/shell-overlay/apply.sh"
+OVERLAY_DROPIN="$REPO_DIR/configs/systemd/dms.service.d/ominty-shell.conf"
+OVERLAY_OK=0
+if [ -x "$OVERLAY" ]; then
+  if [ "$DRY_RUN" -eq 1 ]; then
+    plan "$OVERLAY --check   # verify the overlay against this DMS build"
+    OVERLAY_OK=1
+  elif ! ls /run/user/"$(id -u)"/danklinux-shell/*/ >/dev/null 2>&1; then
     warn "DMS shell overlay skipped: start DMS once, then run configs/dms/shell-overlay/apply.sh"
+  elif "$OVERLAY" --check; then
+    OVERLAY_OK=1
+    say "Applying DMS shell overlay (motion + accent glow)..."
+    run "$OVERLAY"
+  else
+    warn "DMS shell overlay does not match this DMS build; keeping the stock shell."
+  fi
+fi
+if [ "$OVERLAY_OK" -eq 1 ] && [ -f "$OVERLAY_DROPIN" ]; then
+  if [ "$DRY_RUN" -eq 1 ]; then
+    plan "render configs/systemd/dms.service.d/ominty-shell.conf -> ~/.config/systemd/user/dms.service.d/"
+  else
+    mkdir -p ~/.config/systemd/user/dms.service.d
+    sed "s|__HOME__|$HOME|g" "$OVERLAY_DROPIN" \
+      > ~/.config/systemd/user/dms.service.d/ominty-shell.conf
+  fi
+else
+  # A stale drop-in would point DMS at a fork that no longer matches the build.
+  if [ "$DRY_RUN" -eq 0 ]; then
+    rm -f ~/.config/systemd/user/dms.service.d/ominty-shell.conf
   fi
 fi
 
+# --- 5b. DMS user service (source builds) -----------------------------------
+# On Debian the dms package ships its own unit; a source build does not, so we
 # install and enable one for the Ubuntu-family install.
 if [ "$FAMILY" = "ubuntu" ] || [ "$FAMILY" = "mint-ubuntu" ]; then
   say "Installing the DMS user service..."
@@ -383,6 +406,16 @@ if [ "$FAMILY" = "ubuntu" ] || [ "$FAMILY" = "mint-ubuntu" ]; then
       > ~/.config/systemd/user/dms.service
     systemctl --user daemon-reload
     systemctl --user enable dms.service || warn "Could not enable dms.service"
+  fi
+else
+  # Debian/LMDE: the packaged unit stays, but a new overlay drop-in still
+  # needs a daemon-reload before the next DMS start sees it.
+  if [ "$OVERLAY_OK" -eq 1 ]; then
+    if [ "$DRY_RUN" -eq 1 ]; then
+      plan "systemctl --user daemon-reload   # pick up the overlay drop-in"
+    else
+      systemctl --user daemon-reload
+    fi
   fi
 fi
 
