@@ -281,7 +281,12 @@ run mkdir -p ~/.config/niri ~/.config/DankMaterialShell ~/.config/ominty ~/.loca
 
 # niri
 backup_existing ~/.config/niri/config.kdl
-run cp "$REPO_DIR/configs/niri/config.kdl" ~/.config/niri/config.kdl
+if [ "$DRY_RUN" -eq 1 ]; then
+  plan "render $REPO_DIR/configs/niri/config.kdl -> ~/.config/niri/config.kdl (with __HOME__ replaced)"
+else
+  sed "s|__HOME__|$HOME|g" "$REPO_DIR/configs/niri/config.kdl" \
+    > ~/.config/niri/config.kdl
+fi
 run mkdir -p ~/.config/niri/dms
 for f in "$REPO_DIR"/configs/niri/dms/*.kdl; do
   run cp "$f" ~/.config/niri/dms/
@@ -352,6 +357,20 @@ fi
 
 # --- 5b. DMS user service (source builds) -----------------------------------
 # On Debian the dms package ships its own unit; a source build does not, so we
+# --- 5. DMS user service + shell overlay ------------------------------------
+
+# DMS embeds its QML shell in the binary and extracts it on first start. The
+# overlay needs that extracted dist, so on a fresh install it is skipped and
+# can be applied after DMS has run once.
+if [ -x "$REPO_DIR/configs/dms/shell-overlay/apply.sh" ]; then
+  if ls /run/user/"$(id -u)"/danklinux-shell/*/ >/dev/null 2>&1; then
+    say "Applying DMS shell overlay (motion + accent glow)..."
+    run "$REPO_DIR/configs/dms/shell-overlay/apply.sh"
+  else
+    warn "DMS shell overlay skipped: start DMS once, then run configs/dms/shell-overlay/apply.sh"
+  fi
+fi
+
 # install and enable one for the Ubuntu-family install.
 if [ "$FAMILY" = "ubuntu" ] || [ "$FAMILY" = "mint-ubuntu" ]; then
   say "Installing the DMS user service..."

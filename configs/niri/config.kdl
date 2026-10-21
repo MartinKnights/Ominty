@@ -110,9 +110,9 @@ layout {
     border {
         off
         width 4
-        active-color   "#707070"      // Neutral gray
+        active-color "#707070"      // Neutral gray
         inactive-color "#d0d0d0"      // Light gray
-        urgent-color   "#cc4444"      // Softer red
+        urgent-color "#cc4444"      // Softer red
     }
     shadow {
         softness 30
@@ -126,7 +126,7 @@ layout {
 layer-rule {
       match namespace="^quickshell$"
       place-within-backdrop true
-  }
+}
 
   // Ominty dictionary popup: blur only the panel (the fullscreen dim
   // backdrop is a separate -dim surface that stays unblurred).
@@ -134,9 +134,9 @@ layer-rule {
       match namespace="^ominty:dictionary$"
       background-effect {
           blur true
-      }
-  }
-  overview {
+    }
+}
+overview {
     workspace-shadow {
         off
     }
@@ -155,8 +155,10 @@ hotkey-overlay {
 prefer-no-csd
 screenshot-path "~/Pictures/Screenshots/Screenshot from %Y-%m-%d %H-%M-%S.png"
 animations {
+    off
+
     workspace-switch {
-        spring damping-ratio=0.80 stiffness=523 epsilon=0.0001
+        spring damping-ratio=0.8 stiffness=523 epsilon=0.0001
     }
     window-open {
         duration-ms 150
@@ -170,7 +172,8 @@ animations {
         spring damping-ratio=0.85 stiffness=423 epsilon=0.0001
     }
     window-movement {
-        spring damping-ratio=0.75 stiffness=323 epsilon=0.0001
+        duration-ms 220
+        curve "cubic-bezier" 0.45 0 0.75 0.25
     }
     window-resize {
         spring damping-ratio=0.85 stiffness=423 epsilon=0.0001
@@ -195,38 +198,39 @@ window-rule {
     // This regular expression is intentionally made as specific as possible,
     // since this is the default config, and we want no false positives.
     // You can get away with just app-id="wezterm" if you want.
-    match app-id=r#"^org\.wezfurlong\.wezterm$"#
-    default-column-width {}
+    match app-id=r"^org\.wezfurlong\.wezterm$"
+    default-column-width {
+    }
 }
 window-rule {
-    match app-id=r#"^org\.gnome\."#
+    match app-id=r"^org\.gnome\."
     draw-border-with-background false
     geometry-corner-radius 12
     clip-to-geometry true
 }
 window-rule {
-    match app-id=r#"^gnome-control-center$"#
-    match app-id=r#"^pavucontrol$"#
-    match app-id=r#"^nm-connection-editor$"#
+    match app-id=r"^gnome-control-center$"
+    match app-id=r"^pavucontrol$"
+    match app-id=r"^nm-connection-editor$"
     default-column-width { proportion 0.5; }
     open-floating false
 }
 window-rule {
-    match app-id=r#"^org\.gnome\.Calculator$"#
-    match app-id=r#"^gnome-calculator$"#
-    match app-id=r#"^galculator$"#
-    match app-id=r#"^blueman-manager$"#
-    match app-id=r#"^org\.gnome\.Nautilus$"#
-    match app-id=r#"^xdg-desktop-portal$"#
+    match app-id=r"^org\.gnome\.Calculator$"
+    match app-id=r"^gnome-calculator$"
+    match app-id=r"^galculator$"
+    match app-id=r"^blueman-manager$"
+    match app-id=r"^org\.gnome\.Nautilus$"
+    match app-id=r"^xdg-desktop-portal$"
     open-floating true
 }
 window-rule {
-    match app-id=r#"^steam$"# title=r#"^notificationtoasts_\d+_desktop$"#
+    match app-id=r"^steam$" title=r"^notificationtoasts_\d+_desktop$"
     default-floating-position x=10 y=10 relative-to="bottom-right"
     open-focused false
 }
 window-rule {
-    match app-id=r#"^org\.wezfurlong\.wezterm$"#
+    match app-id=r"^org\.wezfurlong\.wezterm$"
     match app-id="Alacritty"
     match app-id="zen"
     match app-id="com.mitchellh.ghostty"
@@ -234,8 +238,26 @@ window-rule {
     draw-border-with-background false
 }
 window-rule {
-    match app-id=r#"firefox$"# title="^Picture-in-Picture$"
+    match app-id=r"firefox$" title="^Picture-in-Picture$"
     match app-id="zoom"
+    open-floating true
+}
+
+// Vorta (Borg backup) and Mullvad VPN are daemon apps whose settings windows
+// otherwise tile into the layout. Niri has no minimise, so float them: they
+// overlay the tiled columns instead of taking one, and can be moved aside.
+// NOTE: their tray icons cannot appear in the DMS tray (quickshell 0.3.1
+// cannot load Qt-style SNI items), so the window is currently the only UI.
+// Both keep running when the window is closed - close it to get it out of
+// the way, and relaunch the app to bring the window back.
+window-rule {
+    match app-id=r"^vorta$"
+    match app-id=r"^Vorta$"
+    match app-id=r"^com\.borgbase\.Vorta$"
+    open-floating true
+}
+window-rule {
+    match app-id=r"^mullvad-vpn$"
     open-floating true
 }
 debug {
@@ -252,19 +274,82 @@ recent-windows {
     }
 }
 
+// User script bindings. Kept here rather than in the DMS or Ominty
+// generated files so they survive regeneration of those files.
+//
+// Niri does not read Cinnamon's dconf custom-keybindings, so every script
+// shortcut has to be declared here explicitly to work in this session. These
+// four mirror /org/cinnamon/desktop/keybindings/custom-keybindings/custom0-3
+// one-for-one, so the same chords work in both sessions:
+//
+//   custom0  Super+S      -> script_command_centre.sh
+//   custom1  Ctrl+Alt+S   -> read-selection   (speak the selection)
+//   custom2  Ctrl+Alt+A   -> artha            (awk-style name transform)
+//   custom3  Ctrl+Alt+R   -> screen-ocr
+//
+// Mod+S was previously <Shift><Super>p, which collided with the DMS
+// Mod+Shift+P binding (power-off-monitors).
+binds {
+    Mod+S { spawn "__HOME__/Scripts/script_command_centre.sh"; }
+    Ctrl+Alt+S { spawn "__HOME__/bin/read-selection"; }
+    Ctrl+Alt+A { spawn "__HOME__/bin/artha-word"; }
+    Ctrl+Alt+R { spawn "__HOME__/.local/bin/screen-ocr"; }
+    // Pick a document and read it aloud (Ominty TTS document player).
+    Ctrl+Alt+O { spawn "__HOME__/bin/tts-pick"; }
+    Mod+Alt+O { spawn "__HOME__/bin/tts-pick"; }
+}
+
+// Start swayidle (lock on idle, and before suspend) for the Niri session
+// only. Started from here instead of `systemctl --user enable`d so it does
+// not also start under Cinnamon, which brings its own screen lock.
+// start-swayidle imports WAYLAND_DISPLAY into the systemd user manager
+// first, because swayidle needs it and a unit would not inherit it.
+// Swaylock reads ~/.config/swaylock/config.
+spawn-at-startup "__HOME__/.local/bin/start-swayidle"
+
+// Piper TTS: Niri does not run XDG autostart .desktop files, so the daemon
+// and indicator have to be started here. Both are single-instance (flock),
+// so a leftover process from another session is detected and this exits.
+spawn-at-startup "__HOME__/bin/piper-daemon"
+spawn-at-startup "__HOME__/bin/piper-indicator"
+
+// Apps that Cinnamon autostarts via ~/.config/autostart/*.desktop. Niri does
+// not run XDG autostart, so they are started here to keep the same tray
+// icons in both sessions. All of these register StatusNotifierItems, which
+// the DMS bar's systemTray widget displays.
+// XEmbed -> SNI bridge: the DMS bar is SNI-only, so legacy XEmbed tray apps
+// (Update Manager, NetworkManager Applet, Artha) need this to appear.
+spawn-at-startup "xembedsniproxy"
+spawn-at-startup "wait-for-tray" "vorta" "--daemonize"
+spawn-at-startup "wait-for-tray" "/opt/Mullvad VPN/mullvad-vpn"
+spawn-at-startup "mintupdate"
+// KDE Connect backend for the DMS dankKDEConnect plugin (the plugin itself
+// provides the Niri-side integration; kdeconnectd's own tray icon is XEmbed
+// and cannot appear in the SNI-only DMS tray).
+spawn-at-startup "/usr/lib/x86_64-linux-gnu/libexec/kdeconnectd"
+
+// Ominty voice recording indicator (docs/ai/11-voice-integration.md, ADR-007).
+// A focused Quickshell popup showing the live mic level while dictating; it
+// watches $XDG_RUNTIME_DIR/ominty-voice/status.json and is presentation-only.
+spawn-at-startup "quickshell" "-c" "ominty-voice"
+
+// Ominty TTS document player control (docs/ai/11). Shown while a document is
+// being read aloud; it self-hides when playback ends.
+spawn-at-startup "quickshell" "-c" "ominty-tts"
+
 // Include dms files
-include optional=true "dms/colors.kdl"
-include optional=true "dms/layout.kdl"
-include optional=true "dms/alttab.kdl"
-include optional=true "dms/binds.kdl"
-include optional=true "dms/outputs.kdl"
-include optional=true "dms/cursor.kdl"
-include optional=true "dms/input.kdl"
+include "dms/colors.kdl" optional=true
+include "dms/layout.kdl" optional=true
+include "dms/alttab.kdl" optional=true
+include "dms/binds.kdl" optional=true
+include "dms/outputs.kdl" optional=true
+include "dms/cursor.kdl" optional=true
+include "dms/input.kdl" optional=true
 
 // Ominty generated bindings (registry → Niri fragment)
-include optional=true "~/.config/ominty/generated/niri/bindings.kdl"
+include "~/.config/ominty/generated/niri/bindings.kdl" optional=true
 include "dms/windowrules.kdl"
 
-// Ominty aesthetics (matugen-generated: border + glow + window animations).
-// Included last so its layout/border/shadow win over the DMS fragments above.
+// Ominty aesthetics (matugen-generated: border + glow). Included last so its
+// layout/border/shadow win over the DMS-generated fragments above.
 include "dms/ominty-theme.kdl" optional=true

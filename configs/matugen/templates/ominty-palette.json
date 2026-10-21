@@ -1,4 +1,5 @@
 {
+  "mode": "{{mode}}",
   "dark": {
     "background": "{{colors.surface_container.dark.hex}}",
     "on_background": "{{colors.on_surface.dark.hex}}",

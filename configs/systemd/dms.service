@@ -11,6 +11,9 @@ BusName=org.freedesktop.Notifications
 # __HOME__ is replaced by install.sh at deploy time.
 Environment=PATH=__HOME__/.local/bin:/usr/local/bin:/usr/bin:/bin
 Environment=OMINTY_CLI=__HOME__/.local/bin/ominty
+# Writable DMS shell fork carrying the Ominty motion + accent-glow overlay.
+# Created by configs/dms/shell-overlay/apply.sh; remove this line to roll back.
+Environment=DMS_SHELL_DIR=__HOME__/.local/share/dms-shell
 ExecStart=__HOME__/.local/bin/dms run --session
 ExecReload=/bin/kill -USR1 $MAINPID
 LimitNOFILE=16384:infinity
