@@ -118,6 +118,18 @@ backup_existing() {  # backup_existing <path>
   say "Backed up existing $p -> $bak"
 }
 
+backup_if_changed() {  # backup_if_changed <new-source> <dest>
+  # Helper scripts are user-editable too, so preserve a locally modified copy
+  # before replacing it. Identical files are replaced silently, which keeps
+  # re-running the installer from littering ~/bin with identical .bak files.
+  local src="$1" dest="$2"
+  [ -e "$dest" ] || return 0
+  cmp -s "$src" "$dest" && return 0
+  local bak="${dest}.bak-ominty-$(date +%Y%m%d-%H%M%S)"
+  run cp -a "$dest" "$bak"
+  say "Backed up modified $dest -> $bak"
+}
+
 have_repo_line() {  # have_repo_line <suite>
   grep -rqs -- "$1" /etc/apt/sources.list /etc/apt/sources.list.d/
 }
@@ -388,11 +400,15 @@ done
 say "Deploying helper scripts..."
 run mkdir -p ~/bin ~/.local/bin ~/Scripts ~/.config/quickshell ~/.config/swaylock
 for f in "$REPO_DIR"/configs/bin/*; do
+  backup_if_changed "$f" ~/bin/"$(basename "$f")"
   run install -m 0755 "$f" ~/bin/
 done
 for f in "$REPO_DIR"/configs/local-bin/*; do
+  backup_if_changed "$f" ~/.local/bin/"$(basename "$f")"
   run install -m 0755 "$f" ~/.local/bin/
 done
+backup_if_changed "$REPO_DIR/configs/Scripts/script_command_centre.sh" \
+  ~/Scripts/script_command_centre.sh
 run install -m 0755 "$REPO_DIR/configs/Scripts/script_command_centre.sh" \
   ~/Scripts/script_command_centre.sh
 
@@ -404,8 +420,11 @@ run ln -sfn "$REPO_DIR/ominty-core/shell/quickshell/ominty-tts" \
   ~/.config/quickshell/ominty-tts
 
 # swayidle unit + swaylock theme (started by ~/.local/bin/start-swayidle).
+backup_if_changed "$REPO_DIR/configs/systemd/swayidle.service" \
+  ~/.config/systemd/user/swayidle.service
 run cp "$REPO_DIR/configs/systemd/swayidle.service" \
   ~/.config/systemd/user/swayidle.service
+backup_if_changed "$REPO_DIR/configs/swaylock/config" ~/.config/swaylock/config
 run cp "$REPO_DIR/configs/swaylock/config" ~/.config/swaylock/config
 
 # --- 5. ominty CLI ---------------------------------------------------------
