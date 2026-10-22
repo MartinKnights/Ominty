@@ -94,6 +94,13 @@ user already runs. Follow [`docs/MIGRATION.md`](docs/MIGRATION.md): inventory th
 incumbent session, map its settings to their Niri equivalents, and confirm each
 mapping before replacing anything.
 
+**Upgrading a machine that already runs Ominty?** Stop here and follow
+[`docs/AGENT-UPGRADE.md`](docs/AGENT-UPGRADE.md) instead of continuing with the
+install path below. It is a gate-by-gate runbook for that exact case (update the
+checkout, assess, install, verify with `scripts/verify-upgrade.sh`) and it
+requires you to produce a friction report at the end. The install flow below
+assumes a machine that is not yet running Ominty.
+
 Do not run `install.sh` until you have completed section 6.
 
 ---
