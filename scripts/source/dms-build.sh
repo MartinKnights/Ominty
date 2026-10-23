@@ -113,13 +113,22 @@ if [ "$FORCE" -ne 1 ] && [ -x "$installed" ] && [ "$stamp" = "$commit" ]; then
     say "DMS $commit already installed at $installed"
 else
     say "Building DMS $commit (this takes a minute)…"
-    ( cd "$DMS_SRC" && make -C core build ) || die "DMS build failed"
+    # Pin the version string: the Makefile falls back to `git describe`, which
+    # yields nonsense ("(git) v-1") when the shallow clone has no tags. This
+    # value is what `ominty inspect` and the verify script report.
+    ( cd "$DMS_SRC" && make -C core VERSION="ominty-pinned+$commit" build ) \
+        || die "DMS build failed"
     install -m 0755 "$DMS_SRC/core/bin/dms" "$installed" || die "DMS install failed"
     printf '%s\n' "$commit" > "$STAMP"
 fi
 
 [ -f "$DIST/.dankrev" ] || die "shell dist missing at $DIST"
 rev="$(cat "$DIST/.dankrev")"
+
+# The shell build id keys the QML cache (see configs/systemd/dms.service), so a
+# new build never inherits a cache written by a crashed one.
+mkdir -p "$BUILD_DIR"
+printf '%s\n' "$rev" > "$BUILD_DIR/.ominty-dms-shellrev"
 
 say "Installed: $("$installed" version 2>/dev/null | tail -1)"
 say "Shell build: $rev"

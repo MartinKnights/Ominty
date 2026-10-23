@@ -256,6 +256,7 @@ plus the checks a machine cannot make. Expected values are in the Appendix.
 | 1 | Right binary | `dms version` | reports the pinned build, **not** `2.0.0` |
 | 2 | Unit is ours | `systemctl --user cat dms.service \| head -5` | `ExecStart=%h/.local/bin/dms` or the resolved home path |
 | 3 | Fork in use | `systemctl --user show dms.service -p Environment` | contains `DMS_SHELL_DIR=.../dms-shell` |
+| 3b | Shell is alive | `./scripts/smoke-dms.sh` | stable, `NRestarts` unchanged, IPC responsive |
 | 4 | Overlay base | `cat ~/.local/share/dms-shell/.ominty-overlay.json` | `"base":"c27a2bbcb6e09e50"` |
 | 5 | Overlay applied | `./ominty-core/cli/ominty inspect --json` | `desktop.shell_overlay.state == "applied"` |
 | 6 | Desktop source | same JSON | `platform.desktop_source == "source"` |

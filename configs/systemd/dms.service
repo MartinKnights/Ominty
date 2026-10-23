@@ -11,6 +11,10 @@ BusName=org.freedesktop.Notifications
 # __HOME__ is replaced by install.sh at deploy time.
 Environment=PATH=__HOME__/.local/bin:/usr/local/bin:/usr/bin:/bin
 Environment=OMINTY_CLI=__HOME__/.local/bin/ominty
+# Key the QML cache by shell build. Quickshell's type loader caches compiled
+# QML under XDG_CACHE_HOME; sharing one cache between a crashed build and a
+# working one left the bar rendering but unresponsive (LMDE 7, 2026-10-22).
+Environment=XDG_CACHE_HOME=__HOME__/.cache/ominty/dms-__DMSREV__
 ExecStart=__HOME__/.local/bin/dms run --session
 ExecReload=/bin/kill -USR1 $MAINPID
 LimitNOFILE=16384:infinity

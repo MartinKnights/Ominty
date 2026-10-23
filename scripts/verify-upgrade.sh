@@ -69,8 +69,17 @@ else
         bad "DMS_SHELL_DIR is not set — the overlay fork will not be used"
     fi
 
-    if systemctl --user is-active --quiet dms.service 2>/dev/null; then
-        ok "dms.service is running"
+    smoke="$REPO_DIR/scripts/smoke-dms.sh"
+    if [ -x "$smoke" ]; then
+        # A crash-looping unit reports "active" between restarts, so observe it
+        # over a window and probe IPC (LMDE 7, 2026-10-22: 15 restarts passed).
+        if "$smoke" --wait 6 >/dev/null 2>&1; then
+            ok "dms.service is stable and answering IPC"
+        else
+            bad "dms.service is not stable (crash loop or no IPC) — run scripts/smoke-dms.sh"
+        fi
+    elif systemctl --user is-active --quiet dms.service 2>/dev/null; then
+        ok "dms.service is active (smoke-dms.sh missing; liveness not verified)"
     else
         bad "dms.service is not running"
     fi

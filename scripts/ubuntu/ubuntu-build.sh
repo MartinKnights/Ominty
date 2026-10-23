@@ -48,27 +48,13 @@ fi
 [ -x "$QT_PREFIX/bin/qmake" ] || die "Qt not found at $QT_PREFIX after install"
 
 # --- 2. Quickshell --------------------------------------------------------
-if [ -x "$PREFIX/bin/quickshell" ]; then
-  say "Quickshell already present at $PREFIX/bin/quickshell"
-else
-  say "Building Quickshell against Qt $QT_VERSION…"
-  qs_src="$BUILD_DIR/quickshell"
-  [ -d "$qs_src/.git" ] || git clone --depth 1 \
-    https://github.com/quickshell-mirror/quickshell.git "$qs_src" \
-    || die "quickshell clone failed"
-  (
-    cd "$qs_src" || exit 1
-    cmake -GNinja -B build -DCMAKE_BUILD_TYPE=Release \
-      -DCMAKE_PREFIX_PATH="$QT_PREFIX" \
-      -DCMAKE_INSTALL_PREFIX="$PREFIX" \
-      -DCMAKE_INSTALL_RPATH="$QT_PREFIX/lib" \
-      -DCMAKE_INSTALL_RPATH_USE_LINK_PATH=ON \
-      -DVENDOR_CPPTRACE=ON \
-      -DDISTRIBUTOR="Ominty (Ubuntu-family source build)" || exit 1
-    cmake --build build -j "$JOBS" || exit 1
-    cmake --install build || exit 1
-  ) || die "quickshell build failed"
-fi
+# Delegated to the shared pinned build so Ubuntu and Debian run the same
+# Quickshell, which is what the pinned DMS shell is validated against.
+say "Building Quickshell (pinned; see scripts/source/quickshell-build.sh)…"
+OMINTY_PREFIX="$PREFIX" \
+OMINTY_BUILD_DIR="$BUILD_DIR" \
+OMINTY_QT_PREFIX="$QT_PREFIX" \
+  bash "$REPO_DIR/scripts/source/quickshell-build.sh" || die "Quickshell build failed"
 
 # --- 3. DMS core ----------------------------------------------------------
 # Delegated to the shared pinned build so Ubuntu and Debian get the identical

@@ -134,6 +134,40 @@ have_repo_line() {  # have_repo_line <suite>
   grep -rqs -- "$1" /etc/apt/sources.list /etc/apt/sources.list.d/
 }
 
+# Resolve APT names before installing them.
+#
+# `sudo apt-get install -y a b c` aborts the whole installer under `set -e`
+# when any single name is unavailable. On LMDE 7 (2026-10-22) that was
+# `zellij`, and it killed the run before the DMS build ever started. Missing
+# names are now reported, skipped and summarised at the end; everything else
+# still installs.
+APT_SKIPPED=()
+apt_install_resilient() {  # apt_install_resilient <package>...
+  local p available=() missing=()
+  for p in "$@"; do
+    [ -n "$p" ] || continue
+    # Already provided outside apt (e.g. a hand-installed zellij)? Leave it
+    # alone: reinstalling would either fail or shadow the user's copy.
+    if command -v "$p" >/dev/null 2>&1; then
+      say "Already present on PATH, not installing: $p"
+      continue
+    fi
+    if apt-cache show "$p" >/dev/null 2>&1; then
+      available+=("$p")
+    else
+      missing+=("$p")
+      APT_SKIPPED+=("$p")
+    fi
+  done
+  if [ "${#missing[@]}" -gt 0 ]; then
+    warn "Not available from the configured APT sources (skipped): ${missing[*]}"
+  fi
+  if [ "${#available[@]}" -eq 0 ]; then
+    return 0
+  fi
+  run sudo apt-get install -y "${available[@]}"
+}
+
 ensure_backports() {
   have_repo_line "trixie-backports" && return 0
   say "Enabling trixie-backports (required for quickshell)..."
@@ -264,7 +298,7 @@ if [ "$FAMILY" = "ubuntu" ] || [ "$FAMILY" = "mint-ubuntu" ]; then
   if [ -n "$APT_BEST_EFFORT" ]; then
     say "Installing remaining layer packages (best effort)…"
     # shellcheck disable=SC2086
-    run sudo apt-get install -y $APT_BEST_EFFORT || warn "Some layer packages are unavailable on this family; continuing."
+    apt_install_resilient $APT_BEST_EFFORT
   fi
 else
   # --- 1. apt repositories (Debian/LMDE) ------------------------------------
@@ -277,13 +311,39 @@ else
   say "Installing system packages (this needs sudo)..."
   run sudo apt-get update -y
 
-  # quickshell first, pinned to Debian's trixie-backports build rather than the
-  # deprecated OBS one (see pin_quickshell).
-  run sudo apt-get install -y -t trixie-backports quickshell
+  # quickshell from Debian first: it is the fallback if the pinned source build
+  # below fails, and it pulls the QML runtime DMS needs.
+  if apt-cache show quickshell >/dev/null 2>&1; then
+    run sudo apt-get install -y -t trixie-backports quickshell \
+      || warn "Could not install the distro quickshell; the source build below must succeed."
+  else
+    warn "No quickshell package in the configured sources; the source build below must succeed."
+  fi
+
   # shellcheck disable=SC2086
-  run sudo apt-get install -y $APT_PACKAGES
+  apt_install_resilient $APT_PACKAGES
   # shellcheck disable=SC2086
-  [ -z "$OBS_PACKAGES" ] || run sudo apt-get install -y $OBS_PACKAGES
+  [ -z "$OBS_PACKAGES" ] || apt_install_resilient $OBS_PACKAGES
+
+  # --- 2a. Quickshell from source (pinned) ----------------------------------
+  # The pinned DMS shell is built against Quickshell 0.3.1; Debian 13 ships
+  # 0.3.0, on which it segfaults in QQmlTypeLoader (LMDE 7, 2026-10-22).
+  if [ "${OMINTY_SKIP_QUICKSHELL_BUILD:-0}" = "1" ]; then
+    warn "OMINTY_SKIP_QUICKSHELL_BUILD=1 — using the distro Quickshell."
+  else
+    say "Installing Quickshell build dependencies..."
+    # shellcheck disable=SC2086
+    apt_install_resilient \
+      cmake ninja-build pkg-config qt6-base-dev qt6-base-private-dev \
+      qt6-declarative-dev qt6-declarative-private-dev qt6-wayland-dev \
+      qt6-shadertools-dev libcli11-dev libdrm-dev libgbm-dev libjemalloc-dev \
+      libunwind-dev libpam0g-dev libpipewire-0.3-dev libpolkit-agent-1-dev \
+      libwayland-dev wayland-protocols libxkbcommon-dev spirv-tools \
+      libglib2.0-dev libxcb1-dev
+    say "Building pinned Quickshell (this takes a few minutes)..."
+    run bash "$REPO_DIR/scripts/source/quickshell-build.sh" \
+      || warn "Quickshell build failed; the distro build will be used (the shell may not start)."
+  fi
 fi
 
 # --- 2b. DMS from source ----------------------------------------------------
@@ -293,6 +353,9 @@ fi
 # delegates here too.
 DMS_BUILD="$REPO_DIR/scripts/source/dms-build.sh"
 DMS_DIST="${OMINTY_BUILD_DIR:-$HOME/.cache/ominty/build}/DankMaterialShell/core/internal/shellembed/dist"
+# Shell build id: keys the QML cache so a crashed build cannot poison the
+# next one, and is reported by `ominty inspect`.
+DMS_REV="$(cat "${OMINTY_BUILD_DIR:-$HOME/.cache/ominty/build}/.ominty-dms-shellrev" 2>/dev/null || cat "$DMS_DIST/.dankrev" 2>/dev/null || echo stock)"
 if [ -x "$DMS_BUILD" ]; then
   say "Building DMS from source (pinned; this takes a minute)..."
   run bash "$DMS_BUILD"
@@ -514,10 +577,38 @@ if [ "$DRY_RUN" -eq 1 ]; then
 else
   mkdir -p ~/.config/systemd/user
   backup_existing ~/.config/systemd/user/dms.service
-  sed "s|__HOME__|$HOME|g" "$REPO_DIR/configs/systemd/dms.service" \
+  sed -e "s|__HOME__|$HOME|g" -e "s|__DMSREV__|$DMS_REV|g" \
+    "$REPO_DIR/configs/systemd/dms.service" \
     > ~/.config/systemd/user/dms.service
   systemctl --user daemon-reload
   systemctl --user enable dms.service || warn "Could not enable dms.service"
+fi
+
+# --- 5c. shell smoke test ---------------------------------------------------
+# A crash-looping unit still reports "active" between restarts (LMDE 7,
+# 2026-10-22: 15 restarts while the verify script reported OK). Test stability
+# over a window, then fall back rather than leaving the user with no shell.
+DMS_FAILED=0
+if [ "$DRY_RUN" -eq 1 ]; then
+  plan "scripts/smoke-dms.sh --restart   # verify the shell stays up"
+else
+  SMOKE="$REPO_DIR/scripts/smoke-dms.sh"
+  ROLLBACK="$REPO_DIR/scripts/rollback-dms.sh"
+  if [ -x "$SMOKE" ]; then
+    if ! "$SMOKE" --restart; then
+      warn "The pinned DMS shell did not stay up."
+      [ -x "$ROLLBACK" ] && { "$ROLLBACK" --overlay-off || true; }
+      if ! "$SMOKE"; then
+        if [ -f /usr/lib/systemd/user/dms.service ] && [ -x "$ROLLBACK" ]; then
+          warn "Still failing; restoring the packaged dms.service."
+          "$ROLLBACK" --to-packaged || true
+        fi
+        "$SMOKE" || DMS_FAILED=1
+      fi
+    fi
+  else
+    warn "scripts/smoke-dms.sh is missing; cannot verify that the shell runs."
+  fi
 fi
 
 # --- 6. DMS plugins ---------------------------------------------------------
@@ -547,6 +638,17 @@ say "Validating..."
 if have niri; then
   niri validate -c ~/.config/niri/config.kdl \
     || warn "niri validate reported issues (re-check after first login)."
+fi
+
+if [ "${#APT_SKIPPED[@]}" -gt 0 ]; then
+  warn "Packages skipped (not in the configured APT sources): ${APT_SKIPPED[*]}"
+  warn "The affected layers will report them as missing in ominty inspect."
+fi
+
+if [ "${DMS_FAILED:-0}" -eq 1 ]; then
+  warn "The DMS shell is NOT running. Everything else installed."
+  warn "Run scripts/diagnose-dms-shell.sh and keep ~/ominty-dms-matrix-*.md."
+  exit 1
 fi
 
 say "Done. Log out and select the 'Niri' session at the display manager."

@@ -85,6 +85,19 @@ patch move together. `scripts/source/dms-build.sh` does the work in user space
 commit in `.ominty-dms-ref`, and skips the build when the pin has not changed.
 Override with `OMINTY_DMS_REF` / `OMINTY_DMS_FORCE=1`.
 
+**Quickshell is pinned too.** The shell is built against Quickshell `v0.3.1`.
+Debian 13 ships `0.3.0`, on which this shell segfaults in `QQmlTypeLoader`
+(LMDE 7, 2026-10-22: 15 restarts). `scripts/source/quickshell-build.sh` builds
+`v0.3.1` against system Qt into `~/.local/bin`, and `install.sh` runs it before
+the DMS build. Set `OMINTY_SKIP_QUICKSHELL_BUILD=1` to use the distro build
+instead — the installer will then smoke-test the shell and fall back if it
+crash-loops.
+
+The installer also smoke-tests the result: it restarts `dms.service`, watches
+`NRestarts` for ~12 s and probes the shell's IPC. If the pinned shell does not
+stay up it disables the overlay, then restores the packaged unit, and exits
+non-zero with a pointer to `scripts/diagnose-dms-shell.sh`.
+
 > The AvengeMedia OBS `dms` package is a newer shell generation with a
 > different QML layout. `install.sh` therefore installs `matugen`, `ghostty`
 > and friends from OBS but **not** `dms`.
