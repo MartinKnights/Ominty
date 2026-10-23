@@ -89,7 +89,8 @@ OBS_REPOS=(
 OBS_SUITE="Debian_13"
 
 # Third-party DMS plugins from the DMS plugin registry
-DMS_PLUGINS=(dankHooks dankKDEConnect dankLauncherKeys quickCapture wallpaperCarousel)
+# Third-party plugins are pinned in configs/dms/plugins.lock.json instead of
+# this list; see the DMS plugins step below.
 
 # --- helpers ---------------------------------------------------------------
 
@@ -382,6 +383,18 @@ case " $LAYERS " in
           || warn "Piper setup failed; TTS stays disabled."
       fi
     fi
+    # Speech to text (dictation). whisper.cpp is not packaged for Debian, so
+    # it is built here; the model is ~142 MB and optional like Piper.
+    if [ "${OMINTY_SKIP_WHISPER_BUILD:-0}" = "1" ]; then
+      warn "OMINTY_SKIP_WHISPER_BUILD=1 — dictation stays disabled."
+    elif [ -x "$REPO_DIR/scripts/source/whisper-build.sh" ]; then
+      if [ "$DRY_RUN" -eq 1 ]; then
+        plan "bash scripts/source/whisper-build.sh   # whisper.cpp + model (optional)"
+      else
+        bash "$REPO_DIR/scripts/source/whisper-build.sh" \
+          || warn "whisper.cpp build failed; dictation stays disabled."
+      fi
+    fi
     ;;
 esac
 
@@ -425,12 +438,16 @@ if [ -n "$PROFILE" ]; then
 fi
 
 # DMS
+# Both files carry __HOME__ where a path is needed (wallpaper directories,
+# the ominty-hook path), so they are rendered rather than copied.
 backup_existing ~/.config/DankMaterialShell/settings.json
-run cp "$REPO_DIR/configs/dms/settings.json" ~/.config/DankMaterialShell/settings.json
 backup_existing ~/.config/DankMaterialShell/plugin_settings.json
 if [ "$DRY_RUN" -eq 1 ]; then
+  plan "render $REPO_DIR/configs/dms/settings.json -> ~/.config/DankMaterialShell/settings.json (with __HOME__ replaced)"
   plan "render $REPO_DIR/configs/dms/plugin_settings.json.template -> ~/.config/DankMaterialShell/plugin_settings.json (with __HOME__ replaced)"
 else
+  sed "s|__HOME__|$HOME|g" "$REPO_DIR/configs/dms/settings.json" \
+    > ~/.config/DankMaterialShell/settings.json
   sed "s|__HOME__|$HOME|g" "$REPO_DIR/configs/dms/plugin_settings.json.template" \
     > ~/.config/DankMaterialShell/plugin_settings.json
 fi
@@ -474,6 +491,12 @@ backup_if_changed "$REPO_DIR/configs/Scripts/script_command_centre.sh" \
   ~/Scripts/script_command_centre.sh
 run install -m 0755 "$REPO_DIR/configs/Scripts/script_command_centre.sh" \
   ~/Scripts/script_command_centre.sh
+
+# The two Ominty services behind the dictionary and playlist surfaces. Their
+# bin/ scripts resolve ../src via realpath, so they must be symlinked into the
+# repository, not copied.
+run ln -sf "$REPO_DIR/omi-media/bin/omi-media" ~/.local/bin/omi-media
+run ln -sf "$REPO_DIR/omi-dictionary/bin/omi-dict" ~/.local/bin/omi-dict
 
 # Quickshell popups spawned by config.kdl (voice indicator, TTS player).
 # -n so re-running never nests a link inside the previous target.
@@ -615,20 +638,41 @@ fi
 
 if [ "$INSTALL_PLUGINS" -eq 1 ]; then
   say "Installing DMS plugins..."
-  run mkdir -p ~/.config/DankMaterialShell/plugins
+  PLUGIN_DIR="$HOME/.config/DankMaterialShell/plugins"
+  run mkdir -p "$PLUGIN_DIR"
+
+  # Ominty's own plugins ship in this repository, so they are symlinked (a
+  # checkout update is a plugin update). Four of these were never deployed
+  # before: the playlist manager and dictionary popup simply did not exist on
+  # an installed machine.
   run ln -sfn "$REPO_DIR/ominty-core/shell/dms/ominty-actions" \
-    ~/.config/DankMaterialShell/plugins/omintyActions
+    "$PLUGIN_DIR/omintyActions"
   run ln -sfn "$REPO_DIR/ominty-core/shell/dms/ominty-keybinds" \
-    ~/.config/DankMaterialShell/plugins/omintyKeybinds
-  for p in "${DMS_PLUGINS[@]}"; do
-    if [ ! -e ~/.config/DankMaterialShell/plugins/$p ]; then
-      if [ -n "$DMS_BIN" ]; then
-        run "$DMS_BIN" plugins install "$p" || warn "Could not install plugin: $p"
-      else
-        warn "DMS binary not found; skipping plugin install: $p"
-      fi
-    fi
-  done
+    "$PLUGIN_DIR/omintyKeybinds"
+  run ln -sfn "$REPO_DIR/omi-media/integrations/dms/omintyMedia" \
+    "$PLUGIN_DIR/omintyMedia"
+  run ln -sfn "$REPO_DIR/omi-dictionary/integrations/dms/ominty-dictionary" \
+    "$PLUGIN_DIR/omintyDictionary"
+  run ln -sfn "$REPO_DIR/ominty-plugins/omintyDownload" \
+    "$PLUGIN_DIR/omintyDownload"
+  run ln -sfn "$REPO_DIR/ominty-plugins/omintyOllama" \
+    "$PLUGIN_DIR/omintyOllama"
+
+  # Third-party plugins: exact revisions, not "whatever HEAD is today".
+  # plugins.lock.json is generated on the reference machine and pinned here.
+  LOCK="$REPO_DIR/configs/dms/plugins.lock.json"
+  if [ -f "$LOCK" ] && [ -n "$DMS_BIN" ]; then
+    run cp "$LOCK" "$HOME/.config/DankMaterialShell/plugins.lock.json"
+    run "$DMS_BIN" plugins restore "$LOCK" \
+      || warn "Could not restore plugins from the lockfile (offline?). Re-run: dms plugins restore \"$HOME/.config/DankMaterialShell/plugins.lock.json\""
+  else
+    warn "No plugin lockfile or DMS binary; skipped third-party plugins."
+  fi
+
+  # Let DMS rescan what is now on disk.
+  if [ "$DRY_RUN" -eq 0 ] && systemctl --user is-active --quiet dms.service 2>/dev/null; then
+    systemctl --user restart dms.service || true
+  fi
 fi
 
 # --- 7. validation ----------------------------------------------------------

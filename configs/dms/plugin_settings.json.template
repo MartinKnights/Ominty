@@ -1,31 +1,75 @@
 {
- "dankHooks": {
-  "enabled": true,
-  "wallpaperPath": "__HOME__/.local/bin/ominty-hook"
- },
- "dankKDEConnect": {
-  "enabled": true
- },
- "dankLauncherKeys": {
-  "enabled": true,
-  "noTrigger": true,
-  "providers": [
-   "niri"
-  ]
- },
- "omintyActions": {
-  "enabled": true,
-  "noTrigger": true,
-  "trigger": ""
- },
- "omintyKeybinds": {
-  "enabled": true
- },
- "quickCapture": {
-  "enabled": true
- },
- "wallpaperCarousel": {
-  "enabled": true,
-  "wallpaperDirectory": "__HOME__/Wallpapers"
- }
+  "dankChat": {
+    "accountPreferences": {
+      "telegram": {
+        "notifications": "default",
+        "syncRead": true
+      },
+      "whatsapp": {
+        "syncRead": true
+      }
+    },
+    "enabled": true
+  },
+  "dankHooks": {
+    "enabled": true,
+    "wallpaperPath": "__HOME__/.local/bin/ominty-hook"
+  },
+  "dankKDEConnect": {
+    "enabled": true,
+    "selectedDeviceId": "c1c8f135cf6b4593b90e08817eec73d0"
+  },
+  "dankLauncherKeys": {
+    "enabled": true,
+    "noTrigger": true,
+    "providers": [
+      "niri"
+    ]
+  },
+  "dankscale": {
+    "enabled": true,
+    "lastAccount": "MartinKnights@github"
+  },
+  "herdrAgentMonitor": {
+    "enabled": true
+  },
+  "mediaDownloader": {
+    "enabled": true
+  },
+  "niriWorkspaces": {
+    "enabled": true
+  },
+  "omintyActions": {
+    "enabled": true,
+    "noTrigger": true,
+    "trigger": ""
+  },
+  "omintyDictionary": {
+    "enabled": true
+  },
+  "omintyDownload": {
+    "enabled": true
+  },
+  "omintyKeybinds": {
+    "enabled": true
+  },
+  "omintyMedia": {
+    "enabled": true
+  },
+  "omintyOllama": {
+    "enabled": true
+  },
+  "processList": {
+    "enabled": true
+  },
+  "quickCapture": {
+    "enabled": true
+  },
+  "screenRecorderYS": {
+    "enabled": true
+  },
+  "wallpaperCarousel": {
+    "enabled": true,
+    "wallpaperDirectory": "__HOME__/Wallpapers"
+  }
 }

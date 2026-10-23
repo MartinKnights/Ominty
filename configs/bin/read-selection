@@ -1,14 +1,34 @@
 #!/bin/bash
 # Read selected text aloud using Piper TTS
 # Strips common markdown formatting before sending to TTS
+#
+# Usage:
+#   read-selection              speak the PRIMARY selection (default)
+#   read-selection --clipboard  speak the clipboard instead
+#
+# There is no key-release event under Niri, so this is fire-and-forget: it
+# writes the cleaned text to the daemon's queue and exits.
 
-QUEUE_FILE="/tmp/piper_queue.txt"
+QUEUE_FILE="${PIPER_QUEUE_FILE:-/tmp/piper_queue.txt}"
+
+SOURCE="primary"
+case "${1:-}" in
+    --clipboard) SOURCE="clipboard" ;;
+    ""|--primary) ;;
+    -h|--help) sed -n '2,12p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    *) echo "usage: read-selection [--primary|--clipboard]" >&2; exit 2 ;;
+esac
 
 # clip-tool selects wl-paste under Wayland (Niri) and xclip/xsel under X11
 # (Cinnamon), so this works unchanged in either session.
 CLIP_TOOL="$HOME/.local/bin/clip-tool"
+[ -x "$CLIP_TOOL" ] || CLIP_TOOL="clip-tool"
 
-TEXT=$("$CLIP_TOOL" primary-paste 2>/dev/null || true)
+if [ "$SOURCE" = "clipboard" ]; then
+    TEXT=$("$CLIP_TOOL" paste 2>/dev/null || true)
+else
+    TEXT=$("$CLIP_TOOL" primary-paste 2>/dev/null || true)
+fi
 
 if [ -z "$TEXT" ]; then
     exit 1

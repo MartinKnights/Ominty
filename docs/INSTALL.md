@@ -144,6 +144,47 @@ that drop-in and restarting `dms.service`.
 Re-run `apply.sh` after every DMS change: the unpacked build id changes and the
 old fork no longer matches.
 
+### Applications and plugins
+
+`install.sh` deploys the surfaces the keybindings open, not just the desktop
+shell:
+
+| Surface | Chord | What makes it work |
+| --- | --- | --- |
+| Dictionary popup | `Ctrl+Shift+A` | `omi-dict` + `omintyDictionary` |
+| Playlist manager | `Shift+Alt+M` (alias `Ctrl+Shift+M`) | `omi-media` + `omintyMedia` |
+| Read a document aloud | `Super+Alt+O` | `tts-pick` + Piper |
+| Read the clipboard aloud | `Shift+Alt+S` | `read-selection --clipboard` + Piper |
+| Dictation panel | `Super+Alt+T` | whisper.cpp + `wtype` |
+| Screen OCR | `Ctrl+Alt+R` | `grim`, `slurp`, `tesseract-ocr` |
+
+`omi-dict` and `omi-media` are symlinked into `~/.local/bin` (their `bin/`
+scripts resolve `../src` through the symlink). Ominty's six DMS plugins are
+symlinked from this checkout, so `git pull` updates them.
+
+Third-party DMS plugins are pinned by **exact commit** in
+`configs/dms/plugins.lock.json` and installed with `dms plugins restore`, rather
+than taking whatever HEAD happens to be that day. Three operator-managed
+custom builds (`aiOverviewControl`, `dankSoftwareDepot`, `mailReader`) are
+deliberately excluded: they live in a local release workspace and carry the
+author's account configuration.
+
+Two things are data rather than code, and are too large for git:
+
+- **Dictionaries** — the `.bgl` sources import to roughly 800 MB under
+  `~/.local/share/omi/`. Run `scripts/omi-dict-import.sh [DIR]` (it maps the
+  common filenames to the ids the shipped config expects). Without it the
+  popup reports that the dictionary is unavailable.
+- **Speech models** — the Piper voice and whisper's `ggml-base.en.bin`
+  (~142 MB) are fetched by `scripts/tts/setup-piper.sh` and
+  `scripts/source/whisper-build.sh`.
+
+Check that all of this actually works, not just that it exists:
+
+```sh
+scripts/verify-parity.py     # actions, plugins, bindings, TTS/STT/media/dictionary
+```
+
 ### Third-party repositories
 
 `matugen` and `ghostty` are **not packaged in Debian**. They come from

@@ -1,0 +1,66 @@
+{
+  "lockfileVersion": 1,
+  "plugins": {
+    "dankChat": {
+      "commit": "6aeff5f879e1a3621a4f065ec1fd0ad74eb071a3",
+      "repo": "https://github.com/coldi1337/DankChat"
+    },
+    "dankHooks": {
+      "commit": "b827c2296cd45a73bf9318f16a261c9edeec8339",
+      "path": "DankHooks",
+      "repo": "https://github.com/AvengeMedia/dms-plugins"
+    },
+    "dankKDEConnect": {
+      "commit": "b827c2296cd45a73bf9318f16a261c9edeec8339",
+      "path": "DankKDEConnect",
+      "repo": "https://github.com/AvengeMedia/dms-plugins"
+    },
+    "dankLauncherKeys": {
+      "commit": "b827c2296cd45a73bf9318f16a261c9edeec8339",
+      "path": "DankLauncherKeys",
+      "repo": "https://github.com/AvengeMedia/dms-plugins"
+    },
+    "dankMullvadVpn": {
+      "commit": "70b13e94bc25aedc4988da6b577510a148bb2b07",
+      "repo": "https://github.com/bernardopg/dms-mullvad-vpn-plugin"
+    },
+    "dankSystemDoctor": {
+      "commit": "344b51e6ea130afea447de5847a8d6b6a07814ce",
+      "repo": "https://github.com/NordicsSys/DankSystemDoctor"
+    },
+    "dankscale": {
+      "commit": "bddebf0e2935ba23b0614ff9af5bf8f4ed6d3d9f",
+      "repo": "https://github.com/dwright134/dms-dankscale"
+    },
+    "herdrAgentMonitor": {
+      "commit": "c6b731ba9f00c37deef04b1e70251fb1b729c1df",
+      "repo": "https://github.com/Mor-dev/herdr-agent-monitor"
+    },
+    "mediaDownloader": {
+      "commit": "193ececfed4a15128be0ff815ca50867e88f3307",
+      "path": "mediaDownloader",
+      "repo": "https://github.com/hthienloc/dms-plugins"
+    },
+    "niriWorkspaces": {
+      "commit": "c6699c6a2cfc8f6a3f22f6ea6b3bee9e2d43d582",
+      "repo": "https://github.com/Embers-of-the-Fire/dank-niri-workspaces"
+    },
+    "processList": {
+      "commit": "83711c4022b50674d1076f218d8a54a1e82873e6",
+      "repo": "https://github.com/Mithgroth/dms-process-list"
+    },
+    "quickCapture": {
+      "commit": "193ececfed4a15128be0ff815ca50867e88f3307",
+      "path": "quickCapture",
+      "repo": "https://github.com/hthienloc/dms-plugins"
+    },
+    "screenRecorderYS": {
+      "commit": "e3014914bd0efae92ba525dff52919eea39b58c3",
+      "repo": "https://github.com/smithyyang/dms-screen-recorder"
+    },
+    "wallpaperCarousel": {
+      "commit": "761ecd1b7f347beee9f17909f8334d987c935a1a",
+      "repo": "https://github.com/motor-dev/wallpaperCarousel"
+    }
+  }
+}

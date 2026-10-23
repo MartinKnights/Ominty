@@ -148,6 +148,11 @@ overview {
 // This line starts waybar, a commonly used bar for Wayland compositors.
 environment {
   XDG_CURRENT_DESKTOP "niri"
+  // Niri is launched by the display manager, so its PATH is the system one —
+  // not the PATH from a login shell. Every spawn in this file and every
+  // registry-generated binding relies on ~/.local/bin and ~/bin, so set it
+  // explicitly instead of hoping the session inherited it.
+  PATH "__HOME__/.local/bin:__HOME__/bin:/usr/local/bin:/usr/bin:/bin"
 }
 hotkey-overlay {
     skip-at-startup
@@ -294,9 +299,9 @@ binds {
     Ctrl+Alt+S { spawn "__HOME__/bin/read-selection"; }
     Ctrl+Alt+A { spawn "__HOME__/bin/artha-word"; }
     Ctrl+Alt+R { spawn "__HOME__/.local/bin/screen-ocr"; }
-    // Pick a document and read it aloud (Ominty TTS document player).
+    // TTS from file is a registry action now (voice.speak.file, Super+Alt+O);
+    // keep Ctrl+Alt+O as a plain alias for muscle memory.
     Ctrl+Alt+O { spawn "__HOME__/bin/tts-pick"; }
-    Mod+Alt+O { spawn "__HOME__/bin/tts-pick"; }
 }
 
 // Start swayidle (lock on idle, and before suspend) for the Niri session

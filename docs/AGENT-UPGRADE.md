@@ -238,6 +238,12 @@ Most of this is mechanical, so run the script first:
 ```bash
 ./scripts/verify-upgrade.sh | tee /tmp/ominty-verify.log
 echo "verify exit: ${PIPESTATUS[0]}"
+
+# Plumbing is not function: this checks that every action has the program it
+# needs, every configured plugin exists, and the TTS/STT/media/dictionary
+# stacks are complete.
+./scripts/verify-parity.py | tee /tmp/ominty-parity.log
+echo "parity exit: ${PIPESTATUS[0]}"
 ```
 
 It checks the DMS binary and version, the unit, `DMS_SHELL_DIR`, the overlay
@@ -266,6 +272,9 @@ plus the checks a machine cannot make. Expected values are in the Appendix.
 | 10 | Quickshell links | `ls -l ~/.config/quickshell/ominty-voice ~/.config/quickshell/ominty-tts` | both symlinks resolve |
 | 11 | Niri config | `niri validate` | `config is valid` |
 | 12 | TTS runtime | `ominty tts status` | a status line, not a traceback |
+| 13 | Parity | `./scripts/verify-parity.py` | exit 0 — no missing action requirements or plugins |
+| 14 | Dictionary | `omi-dict dictionaries` | at least one dictionary listed |
+| 15 | Playlist manager | `omi-media categories` | the four categories, no traceback |
 
 Save the post-upgrade JSON:
 
@@ -323,7 +332,7 @@ cosmetic = confusing message or doc gap.
 ## Evidence
 - installer log: /tmp/ominty-install.log
 - dry-run: /tmp/ominty-dryrun.log
-- verify output: /tmp/ominty-verify.log
+- verify output: /tmp/ominty-verify.log, /tmp/ominty-parity.log
 - before/after JSON: /tmp/ominty-before.json, /tmp/ominty-after.json
 - pre-upgrade snapshot: <path>
 ```
