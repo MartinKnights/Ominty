@@ -41,6 +41,46 @@ OUT="$HOME/ominty-dms-matrix-$(date +%Y%m%d-%H%M%S).md"
 WORK="$(mktemp -d)"
 results=()
 
+# A shell started by an agent or over SSH often has no session environment,
+# but the compositor does. Ask niri before concluding a variable is unset.
+session_env() {  # session_env <VAR>
+    local var="$1" val="${!1-}"
+    if [ -n "$val" ]; then printf '%s' "$val"; return; fi
+    local pid
+    pid="$(pgrep -x niri 2>/dev/null | head -1)"
+    if [ -n "$pid" ]; then
+        val="$(tr '\0' '\n' < "/proc/$pid/environ" 2>/dev/null \
+               | sed -n "s/^${var}=//p" | head -1)"
+        [ -n "$val" ] && { printf '%s' "$val"; return; }
+    fi
+    case "$var" in
+        WAYLAND_DISPLAY)
+            local sock
+            for sock in "/run/user/$(id -u)"/wayland-*; do
+                [ -S "$sock" ] || continue
+                basename "$sock"
+                return
+            done
+            ;;
+        XDG_RUNTIME_DIR)
+            [ -d "/run/user/$(id -u)" ] && printf '/run/user/%s' "$(id -u)"
+            return
+            ;;
+    esac
+}
+
+for var in WAYLAND_DISPLAY XDG_RUNTIME_DIR XDG_SESSION_TYPE; do
+    [ -n "${!var-}" ] && continue
+    val="$(session_env "$var")"
+    [ -n "$val" ] && export "$var=$val"
+done
+
+if [ -z "${WAYLAND_DISPLAY:-}" ] || [ -z "${XDG_RUNTIME_DIR:-}" ]; then
+    echo "error: no Wayland session environment (WAYLAND_DISPLAY/XDG_RUNTIME_DIR)." >&2
+    echo "       Run this from a terminal inside the niri session." >&2
+    exit 3
+fi
+
 # ---- discovery ------------------------------------------------------------
 dms_bins=()
 [ -x /usr/bin/dms ] && dms_bins+=("/usr/bin/dms")
@@ -86,23 +126,21 @@ run_case() {
     setsid "$dms" run --session >"$log" 2>&1 &
     pid=$!
 
-    local end=$((SECONDS + WAIT))
+    # Judge liveness by "still running after the window". A single IPC probe is
+    # unreliable here: the IPC socket name contains the pid, so a second `dms`
+    # invocation does not necessarily find the instance under test.
+    local end=$((SECONDS + WAIT)) died=0
     while [ "$SECONDS" -lt "$end" ]; do
-        if ! kill -0 "$pid" 2>/dev/null; then
-            state="exited"
-            break
-        fi
+        if ! kill -0 "$pid" 2>/dev/null; then died=1; break; fi
         if PATH="${qsdir:+$qsdir:}$PATH" \
              timeout 3 "$dms" ipc call theme getMode >/dev/null 2>&1; then
             ipc="yes"
-            break
         fi
         sleep 1
     done
 
-    if kill -0 "$pid" 2>/dev/null; then
-        state="${ipc:+stable}"
-        [ "$ipc" = "yes" ] && state="stable" || state="running-no-ipc"
+    if [ "$died" -eq 0 ] && kill -0 "$pid" 2>/dev/null; then
+        state="alive after ${WAIT}s"
         kill -TERM -- "-$pid" 2>/dev/null || kill -TERM "$pid" 2>/dev/null || true
         sleep 1
         kill -KILL -- "-$pid" 2>/dev/null || true
@@ -162,7 +200,7 @@ if [ "$RESTORE" -eq 1 ]; then
 fi
 
 # Success = at least one combination reached stable + ipc.
-if printf '%s\n' "${results[@]}" | grep -q '|stable|yes|'; then
+if printf '%s\n' "${results[@]}" | grep -q '|alive after'; then
     exit 0
 fi
 exit 1
