@@ -225,6 +225,12 @@ sleep 3
 systemctl --user status dms.service --no-pager | head -20
 ```
 
+`install.sh` already smoked-tested the unit. Confirm it is still settled:
+
+```bash
+./scripts/smoke-dms.sh
+```
+
 Then ask the user to **log out and back in**: keybindings apply immediately,
 but the new `spawn-at-startup` entries (Piper daemon, voice popup, swayidle)
 only run in a fresh session. Do not reboot on your own initiative.
@@ -357,17 +363,28 @@ produces a report, and that report is the most valuable kind.
 | Overlay `not-applicable` (exit 1) | Not fatal: the stock shell keeps running. Record it and continue. |
 | Overlay exit 3 | Start DMS once, then `configs/dms/shell-overlay/apply.sh`. Record it. |
 | `dms.service` fails to start | `journalctl --user -u dms.service -n 80 --no-pager`; capture; try `systemctl --user restart`. |
+| Shell starts then dies (crash loop) | `scripts/smoke-dms.sh` will report the restart count and the newest Quickshell crash report. Capture `~/ominty-dms-matrix-*.md` from `scripts/diagnose-dms-shell.sh`, then `scripts/rollback-dms.sh --overlay-off`. |
+| Bar renders but nothing responds | Stale QML cache: `scripts/rollback-dms.sh --overlay-off` restarts with an isolated cache. Do not hand-delete `~/.cache/quickshell` on a build that is still in use. |
 | Piper/TTS disabled | Allowed (optional layer). Record the warning verbatim. |
 | Anything else | Stop and report; do not invent a fix. |
 
 Rollback, only on explicit user request:
 
 ```bash
-rm -f ~/.config/systemd/user/dms.service.d/ominty-shell.conf
-systemctl --user daemon-reload && systemctl --user restart dms.service
-# full: restore ~/.config/niri/config.kdl and ~/.config/DankMaterialShell from
-# the snapshot in Phase 3, then re-run install.sh from the previous commit.
+scripts/rollback-dms.sh --overlay-off    # keep the build, stock shell
+scripts/rollback-dms.sh --to-backup      # previous dms.service
+scripts/rollback-dms.sh --to-packaged    # packaged /usr/bin/dms
 ```
+
+**Scope the rollback to DMS.** Each of these is smoke-tested by the script.
+Do **not** restore `~/.config/niri/config.kdl` or the DMS settings unless the
+user explicitly asks for a full revert: the upgrade legitimately changed them,
+and restoring the old niri config silently deletes every new keybinding (this
+is what happened on LMDE 7 on 2026-10-22 — the machine looked "not upgraded"
+because the binds had been reverted underneath it).
+
+A full revert is the Phase 3 snapshot plus a re-run of `install.sh` from the
+previous commit, and it needs explicit confirmation.
 
 ---
 

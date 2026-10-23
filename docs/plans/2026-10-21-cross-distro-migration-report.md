@@ -572,3 +572,73 @@ submodule URL was still SSH.
 - A pinned bump means regenerating `dms-shell.patch`; `--check` blocks the
   half-patch in the meantime.
 - `danksearch`/`dgop`/`ghostty` still come from OBS and are unaffected.
+
+---
+
+## 14. Second round — after the LMDE 7 evidence (2026-10-23)
+
+The upgrade on the laptop completed its install steps and rolled back. Two
+independent problems were found, and a third was confirmed by inspection.
+
+### 14.1 The shell crash was version skew
+
+The pinned DMS shell (`73759d5`, shell build `c27a2bbb`) segfaults in
+`QQmlTypeLoader` on Debian's Quickshell **0.3.0** / Qt **6.8.2**. It crashed
+with the overlay *and* with the stock embedded shell, and again with a clean
+QML cache. The reference machine runs Quickshell **0.3.1**.
+
+Fix: `scripts/source/quickshell-build.sh` builds `v0.3.1` in user space
+(Debian 13 already has Qt 6.8.2, so no private Qt), and `install.sh` builds it
+before DMS. `scripts/diagnose-dms-shell.sh` runs the DMS × Quickshell matrix on
+a target machine and writes `~/ominty-dms-matrix-*.md`, so the next machine
+answers "which combination works" with one command rather than another round
+trip.
+
+Guards added: `scripts/smoke-dms.sh` (NRestarts + ActiveState + IPC probe),
+install-time smoke test with overlay-off → packaged fallback, per-build
+`XDG_CACHE_HOME` so a crashed build cannot poison the next one, and
+`scripts/rollback-dms.sh` with a DMS-only scope. The previous rollback restored
+the niri config, which silently deleted the new keybindings.
+
+### 14.2 The repository only carried part of the desktop
+
+| Thing | Was | Now |
+|---|---|---|
+| `omi-media`, `omi-dict` | in the tree, never installed | symlinked into `~/.local/bin` |
+| Ominty DMS plugins | 2 of 6 installed | all 6 symlinked |
+| Third-party plugins | 5 hardcoded ids at HEAD | 14 pinned by commit (`plugins.lock.json` + `dms plugins restore`) |
+| `settings.json` | 34 keys | 62 keys, `__HOME__`-rendered |
+| `plugin_settings.json` | 7 plugins | 18, personal mail config removed |
+| TTS actions | none in the registry | `voice.speak.file` (Super+Alt+O), `voice.speak.clipboard` (Shift+Alt+S) |
+| Playlist chord | `Ctrl+Shift+M` | `Shift+Alt+M` (+ alias) |
+| Speech to text | no installer | `whisper-build.sh` (v1.9.5 + `ggml-base.en.bin`) |
+| Dictionary data | undocumented | `scripts/omi-dict-import.sh` (800 MB, not in git) |
+
+`configs/niri/config.kdl` now sets `PATH` explicitly: niri is started by the
+display manager, so `~/.local/bin` and `~/bin` are not guaranteed, and every
+registry-generated spawn depends on them.
+
+### 14.3 New verification
+
+`scripts/verify-parity.py` checks that every action's requirements resolve,
+every configured plugin exists, every generated binding resolves, and the
+TTS/STT/media/dictionary stacks are complete. On its first run against the
+reference machine it found three configured plugins that were not installed —
+the class of failure `verify-upgrade.sh` could not see (it checks plumbing, not
+function).
+
+### 14.4 Installer robustness
+
+`apt_install_resilient` resolves each name before installing, skips what no
+source provides (`zellij` aborted the entire run on LMDE 7), skips anything
+already on `PATH`, and summarises what was skipped. `inspect` now has binary
+fallbacks for `batcat|bat`, `fdfind|fd`, `rg`, `nvim`, `zellij`, `starship`,
+`ghostty` and friends.
+
+### 14.5 Not done
+
+- The DMS × Quickshell matrix must still be run on the laptop to confirm that
+  Quickshell 0.3.1 loads the pinned shell there.
+- The three operator-managed custom plugins (`aiOverviewControl`,
+  `dankSoftwareDepot`, `mailReader`) remain out of the repo by design.
+- Dictionary data and speech models remain downloads, not repository content.
