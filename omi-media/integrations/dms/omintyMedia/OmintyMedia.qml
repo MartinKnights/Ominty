@@ -16,8 +16,13 @@ import qs.Modules.Plugins
 // and via the desktop's MPRIS media widget (the small pill), not here.
 //
 // Single surface (no full-screen dim) so the mouse reaches the list, tabs and
-// close button.  Keyboard: type → filter → ↑/↓ → Enter (play), Ctrl+[ / Ctrl+]
-// switch category, Esc close.  Click works everywhere.
+// close button.
+//
+// Keyboard: three focus zones (tabs → filter → list) cycled with Tab/Shift+Tab.
+//   tabs:   ←/→ and ↑/↓ change folder, Enter moves to the list
+//   filter: type to filter, ↑/↓ move the selection, Enter plays
+//   list:   ↑/↓ move, Enter plays, ←/→ change folder, typing jumps to filter
+// Esc closes; Ctrl+[ / Ctrl+] still cycle folders.  Click works everywhere.
 PluginComponent {
     id: root
 
@@ -29,6 +34,7 @@ PluginComponent {
     property bool _loading: false
     property string _error: ""
     property bool _visible: false
+    property string _zone: "filter"       // tabs | filter | list
 
     readonly property string mediaCli: Quickshell.env("OMI_MEDIA_CLI") || "omi-media"
 
@@ -37,8 +43,85 @@ PluginComponent {
     }
     function _open() {
         root._setVisible(true);
-        if (root._categories.length === 0) root._loadCats();
-        searchField.forceActiveFocus();
+        // Always re-scan: the folder tree is the configuration, so a folder
+        // added while the popup was closed has to appear on reopen.
+        root._loadCats();
+        root._zone = "filter";
+        panelBg.forceActiveFocus();
+    }
+
+    function _setZone(z: string) {
+        root._zone = z;
+        // The panel always holds the keys. A focused TextInput would swallow
+        // Tab before our handler saw it, which is why keyboard navigation
+        // cannot depend on per-control focus.
+        panelBg.forceActiveFocus();
+    }
+    function _setQuery(q: string) {
+        root._query = q;
+        root._itemIndex = 0;
+    }
+    function _cycleZone(delta: int) {
+        const zs = ["tabs", "filter", "list"];
+        root._setZone(zs[(zs.indexOf(root._zone) + delta + zs.length) % zs.length]);
+    }
+    function _moveCat(delta: int) {
+        if (root._categories.length === 0) return;
+        const i = root._categories.findIndex(c => c.id === root._activeCat);
+        const n = root._categories.length;
+        root._selectCat(root._categories[((i < 0 ? 0 : i) + delta + n) % n].id);
+    }
+    function _moveItem(delta: int) {
+        if (root._filtered.length === 0) return;
+        const n = root._filtered.length;
+        root._itemIndex = ((root._itemIndex < 0 ? 0 : root._itemIndex) + delta + n) % n;
+        listView.positionViewAtIndex(root._itemIndex, ListView.Contain);
+    }
+    // One handler for the panel and the filter field, so Tab/arrows behave the
+    // same wherever focus happens to be.
+    function _handleKey(event) {
+        if (event.key === Qt.Key_Escape) { root._close(); event.accepted = true; return; }
+        if (event.key === Qt.Key_Tab || event.key === Qt.Key_Backtab) {
+            root._cycleZone(event.key === Qt.Key_Backtab ? -1 : 1);
+            event.accepted = true; return;
+        }
+        if (event.modifiers & Qt.ControlModifier) {
+            if (event.key === Qt.Key_BracketLeft) { root._moveCat(-1); event.accepted = true; }
+            else if (event.key === Qt.Key_BracketRight) { root._moveCat(1); event.accepted = true; }
+            return;
+        }
+        if (event.key === Qt.Key_Down) {
+            if (root._zone === "tabs") root._moveCat(1); else root._moveItem(1);
+            event.accepted = true; return;
+        }
+        if (event.key === Qt.Key_Up) {
+            if (root._zone === "tabs") root._moveCat(-1); else root._moveItem(-1);
+            event.accepted = true; return;
+        }
+        if (root._zone !== "filter" && event.key === Qt.Key_Right) {
+            root._moveCat(1); event.accepted = true; return;
+        }
+        if (root._zone !== "filter" && event.key === Qt.Key_Left) {
+            root._moveCat(-1); event.accepted = true; return;
+        }
+        if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
+            if (root._zone === "tabs") root._setZone("list");
+            else if (root._itemIndex >= 0 && root._itemIndex < root._filtered.length)
+                root._play(root._filtered[root._itemIndex].name);
+            event.accepted = true; return;
+        }
+        if (root._zone === "filter" && event.key === Qt.Key_Backspace) {
+            root._setQuery(root._query.slice(0, -1));
+            event.accepted = true; return;
+        }
+        // A printable key starts filtering from any zone.
+        if (event.text && event.text.length === 1
+                && event.text.charCodeAt(0) >= 32
+                && !(event.modifiers & (Qt.AltModifier | Qt.MetaModifier))) {
+            root._zone = "filter";
+            root._setQuery(root._query + event.text);
+            event.accepted = true;
+        }
     }
     function _close() {
         root._setVisible(false);
@@ -49,8 +132,7 @@ PluginComponent {
     }
     function _selectCat(id: string) {
         root._activeCat = id;
-        root._query = "";
-        searchField.text = "";
+        root._setQuery("");
         root._loadPlaylists(id);
     }
     function _cycleCat(dir: int) {
@@ -74,6 +156,10 @@ PluginComponent {
         playProc.running = true;
     }
 
+    on_FilteredChanged: root._itemIndex = root._filtered.length
+        ? Math.min(Math.max(root._itemIndex, 0), root._filtered.length - 1)
+        : -1
+
     // Client-side filter over the (already discovered) playlist list.
     readonly property var _filtered: {
         const q = root._query.trim().toLowerCase();
@@ -93,6 +179,18 @@ PluginComponent {
         function toggle(): string { if (root._visible) { root._close(); return "closed" } root._open(); return "opened" }
         function close(): string { root._close(); return "closed" }
         function openCategory(id: string): string { root._open(); root._selectCat(id); return "opened" }
+        // Observable state for tests and scripts (zone, selection, filter).
+        function status(): string {
+            return JSON.stringify({
+                visible: root._visible,
+                zone: root._zone,
+                category: root._activeCat,
+                categories: root._categories.length,
+                itemIndex: root._itemIndex,
+                filtered: root._filtered.length,
+                query: root._query
+            });
+        }
     }
 
     // ---- omi-media processes -----------------------------------------------
@@ -107,10 +205,13 @@ PluginComponent {
                     root._categories = (data.categories || []).map(c => ({
                         id: c.id, name: c.name, count: c.playlist_count
                     }));
-                    if (root._activeCat === "") {
-                        const first = root._categories.find(c => c.count > 0) || root._categories[0];
-                        if (first) root._selectCat(first.id);
+                    if (root._categories.length === 0) {
+                        root._activeCat = "";
+                        root._error = "No folders with playlists under the playlist root";
+                        return;
                     }
+                    const keep = root._categories.find(c => c.id === root._activeCat);
+                    root._selectCat(keep ? keep.id : root._categories[0].id);
                 } catch (e) {
                     console.warn("[omintyMedia] category list parse failed:", e);
                     root._error = "Could not read categories (omi-media categories)";
@@ -180,15 +281,7 @@ PluginComponent {
             border.width: 1
             border.color: Theme.withAlpha(Theme.outline, 0.5)
             focus: true
-            Keys.onPressed: event => {
-                if (event.key === Qt.Key_Escape) {
-                    root._close(); event.accepted = true;
-                } else if (event.key === Qt.Key_BracketLeft && (event.modifiers & Qt.ControlModifier)) {
-                    root._cycleCat(-1); event.accepted = true;
-                } else if (event.key === Qt.Key_BracketRight && (event.modifiers & Qt.ControlModifier)) {
-                    root._cycleCat(1); event.accepted = true;
-                }
-            }
+            Keys.onPressed: event => root._handleKey(event)
 
             ColumnLayout {
                 anchors.fill: parent
@@ -227,7 +320,7 @@ PluginComponent {
                             radius: 8
                             color: active ? Theme.primary : "transparent"
                             border.width: active ? 0 : 1
-                            border.color: Theme.outline
+                            border.color: root._zone === "tabs" ? Theme.primary : Theme.outline
                             RowLayout {
                                 anchors.fill: parent
                                 anchors.leftMargin: Theme.spacingM
@@ -243,10 +336,17 @@ PluginComponent {
                             }
                             MouseArea {
                                 anchors.fill: parent
-                                onClicked: root._selectCat(modelData.id)
+                                onClicked: { root._setZone("tabs"); root._selectCat(modelData.id); }
                             }
                         }
                     }
+                }
+
+                Rectangle {
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: 2
+                    radius: 1
+                    color: root._zone === "tabs" ? Theme.primary : "transparent"
                 }
 
                 // Search box
@@ -256,48 +356,26 @@ PluginComponent {
                     Layout.preferredHeight: 38
                     radius: 6
                     color: "transparent"
-                    border.width: 1
-                    border.color: Theme.outline
-
-                    TextInput {
-                        id: searchField
-                        anchors.fill: parent
-                        anchors.leftMargin: Theme.spacingM
-                        anchors.rightMargin: Theme.spacingM
-                        verticalAlignment: TextInput.AlignVCenter
-                        color: "white"
-                        onTextChanged: {
-                            root._query = searchField.text;
-                            root._itemIndex = root._filtered.length ? 0 : -1;
-                        }
-                        Keys.onPressed: event => {
-                            if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
-                                if (root._itemIndex >= 0 && root._itemIndex < root._filtered.length) {
-                                    root._play(root._filtered[root._itemIndex].name);
-                                }
-                                event.accepted = true;
-                            } else if (event.key === Qt.Key_Down && root._filtered.length) {
-                                root._itemIndex = (root._itemIndex + 1) % root._filtered.length;
-                                event.accepted = true;
-                            } else if (event.key === Qt.Key_Up && root._filtered.length) {
-                                root._itemIndex = (root._itemIndex - 1 + root._filtered.length) % root._filtered.length;
-                                event.accepted = true;
-                            }
-                        }
-                    }
+                    border.width: root._zone === "filter" ? 2 : 1
+                    border.color: root._zone === "filter" ? Theme.primary : Theme.outline
 
                     StyledText {
-                        visible: searchField.text === ""
                         anchors.left: parent.left
+                        anchors.right: parent.right
                         anchors.leftMargin: Theme.spacingM
+                        anchors.rightMargin: Theme.spacingM
                         anchors.verticalCenter: parent.verticalCenter
-                        text: "Filter " + root._activeCatName() + "…  (↓/↑ · Enter play)"
-                        color: Theme.surfaceVariantText
+                        elide: Text.ElideRight
+                        text: (root._query === ""
+                                ? "Filter " + root._activeCatName() + "…"
+                                : root._query)
+                              + (root._zone === "filter" ? "\u258F" : "")
+                        color: root._query === "" ? Theme.surfaceVariantText : "white"
                     }
 
                     MouseArea {
                         anchors.fill: parent
-                        onClicked: searchField.forceActiveFocus()
+                        onClicked: root._setZone("filter")
                     }
                 }
 
@@ -320,6 +398,7 @@ PluginComponent {
                     }
 
                     ListView {
+                        id: listView
                         anchors.fill: parent
                         visible: root._filtered.length > 0 && !root._loading && root._error === ""
                         clip: true
@@ -344,16 +423,24 @@ PluginComponent {
                             }
                             MouseArea {
                                 anchors.fill: parent
-                                onClicked: root._play(modelData.name)
+                                onClicked: { root._setZone("list"); root._play(modelData.name); }
                             }
                         }
                         onCountChanged: root._itemIndex = Math.min(Math.max(root._itemIndex, 0), Math.max(count - 1, -1))
+                    }
+
+                    Rectangle {
+                        anchors.fill: parent
+                        color: "transparent"
+                        radius: 6
+                        border.width: root._zone === "list" ? 1 : 0
+                        border.color: Theme.primary
                     }
                 }
 
                 StyledText {
                     Layout.fillWidth: true
-                    text: "type to filter · ↑/↓ · Enter play · Ctrl+[ ] category · Esc close"
+                    text: "Tab switch focus · ↑/↓ select · ←/→ folder · Enter play · Esc close"
                     color: Theme.surfaceVariantText
                     font.pixelSize: 11
                 }
