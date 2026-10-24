@@ -116,6 +116,34 @@ def cmd_stop(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_sort(args: argparse.Namespace) -> int:
+    """Rewrite a playlist in natural (track) order (spec §12)."""
+    from .playlist import PlaylistError, sort_playlist
+
+    try:
+        result = sort_playlist(
+            args.playlist, in_place=args.in_place, dry_run=args.dry_run
+        )
+    except PlaylistError as e:
+        print(f"omi-media: {e}", file=sys.stderr)
+        return 1
+
+    text = result.pop("text")
+    if args.json:
+        return _out(result, True)
+    if not args.in_place:
+        print(text, end="")
+        return 0
+    if not result["changed"]:
+        print(f"already in order: {result['playlist']}")
+    elif result["written"]:
+        print(f"rewritten: {result['playlist']} ({result['entries']} entries)")
+        print(f"backup:    {result['backup']}")
+    else:
+        print(f"would rewrite: {result['playlist']} (dry run)")
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
         prog="omi-media",
@@ -145,6 +173,19 @@ def build_parser() -> argparse.ArgumentParser:
     st_p.add_argument("--dry-run", action="store_true")
     st_p.add_argument("--json", action="store_true")
     st_p.set_defaults(func=cmd_stop)
+
+    so_p = sub.add_parser(
+        "sort", help="rewrite a playlist in natural (track) order"
+    )
+    so_p.add_argument("playlist", help="path to a .m3u or .m3u8 file")
+    so_p.add_argument(
+        "--in-place", action="store_true",
+        help="rewrite the file (a .bak-ominty-* backup is kept)",
+    )
+    so_p.add_argument("--dry-run", action="store_true",
+                      help="with --in-place: report without writing")
+    so_p.add_argument("--json", action="store_true")
+    so_p.set_defaults(func=cmd_sort)
 
     return p
 

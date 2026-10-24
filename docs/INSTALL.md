@@ -168,6 +168,11 @@ to control the order. A folder with no playlist is hidden until it contains
 one. Drop `*.m3u`/`*.m3u8`/`*.pls` files in; there is no database to import.
 `media.toml` only overrides the player for a folder.
 
+If a generated playlist plays `Track 10` before `Track 2`, the `.m3u` itself is
+in alphabetical order (the format has no track field). Rewrite it in natural
+order with `omi-media sort --in-place <playlist>`; a `.bak-ominty-*` copy is
+kept.
+
 `omi-dict` and `omi-media` are symlinked into `~/.local/bin` (their `bin/`
 scripts resolve `../src` through the symlink). Ominty's six DMS plugins are
 symlinked from this checkout, so `git pull` updates them.
