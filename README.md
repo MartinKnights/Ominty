@@ -80,6 +80,7 @@ Ominty/
 
 - [INSTALL.md](docs/INSTALL.md) — step-by-step install, post-install checks, AI setup
 - [AGENT-UPGRADE.md](docs/AGENT-UPGRADE.md) — agent-executable upgrade runbook + friction report
+- [NAMING.md](docs/NAMING.md) — the official name of every Ominty surface
 - [HARDWARE.md](docs/HARDWARE.md) — supported hardware, profiles, known devices
 - [TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) — common problems and fixes
 - [ARCHITECTURE.md](docs/ARCHITECTURE.md) — how the pieces fit together

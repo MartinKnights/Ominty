@@ -270,7 +270,7 @@ PluginComponent {
                     Layout.fillWidth: true
                     spacing: Theme.spacingM
                     StyledText {
-                        text: "Dictionary"
+                        text: "Ominty Dictionary"
                         font.pixelSize: Theme.fontSizeLarge
                         font.weight: Font.Bold
                         color: Theme.surfaceText

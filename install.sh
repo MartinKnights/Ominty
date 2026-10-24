@@ -498,6 +498,33 @@ run install -m 0755 "$REPO_DIR/configs/Scripts/script_command_centre.sh" \
 run ln -sf "$REPO_DIR/omi-media/bin/omi-media" ~/.local/bin/omi-media
 run ln -sf "$REPO_DIR/omi-dictionary/bin/omi-dict" ~/.local/bin/omi-dict
 
+# Ominty Media discovers playlists by directory, so the tree has to exist
+# before the launcher can show anything. Without this the popup opens empty
+# and the user has no hint where to put files.
+if [ "$DRY_RUN" -eq 1 ]; then
+  plan "create ~/Playlist/{Audio,Courses,Music,Video} + README.txt"
+else
+  mkdir -p ~/Playlist/Audio ~/Playlist/Courses ~/Playlist/Music ~/Playlist/Video
+  if [ ! -f ~/Playlist/README.txt ]; then
+    cat > ~/Playlist/README.txt <<'PLAYLIST_README'
+Ominty Media — playlist folders
+================================
+
+Drop playlist files (*.m3u, *.m3u8, *.pls) into the matching folder:
+
+  Audio/     audio playlists and audiobooks
+  Courses/   lecture and course playlists
+  Music/     music playlists
+  Video/     video playlists
+
+They appear in the launcher (Shift+Alt+M) grouped by these four tabs, and open
+in the player configured for that category (vlc by default).
+
+The launcher scans these folders only; it keeps no database.
+PLAYLIST_README
+  fi
+fi
+
 # Quickshell popups spawned by config.kdl (voice indicator, TTS player).
 # -n so re-running never nests a link inside the previous target.
 run ln -sfn "$REPO_DIR/ominty-core/shell/quickshell/ominty-voice" \

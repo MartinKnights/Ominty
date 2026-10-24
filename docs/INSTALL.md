@@ -151,12 +151,19 @@ shell:
 
 | Surface | Chord | What makes it work |
 | --- | --- | --- |
-| Dictionary popup | `Ctrl+Shift+A` | `omi-dict` + `omintyDictionary` |
-| Playlist manager | `Shift+Alt+M` (alias `Ctrl+Shift+M`) | `omi-media` + `omintyMedia` |
-| Read a document aloud | `Super+Alt+O` | `tts-pick` + Piper |
-| Read the clipboard aloud | `Shift+Alt+S` | `read-selection --clipboard` + Piper |
-| Dictation panel | `Super+Alt+T` | whisper.cpp + `wtype` |
-| Screen OCR | `Ctrl+Alt+R` | `grim`, `slurp`, `tesseract-ocr` |
+| **Ominty Dictionary** | `Ctrl+Shift+A` | `omi-dict` + `omintyDictionary` |
+| **Ominty Media** | `Shift+Alt+M` (alias `Ctrl+Shift+M`) | `omi-media` + `omintyMedia` |
+| **Ominty Reader** (document) | `Super+Alt+O` | `tts-pick`, pandoc/pdftotext/catdoc, Piper |
+| **Ominty Reader** (clipboard) | `Shift+Alt+S` | `read-selection --clipboard`, Piper |
+| **Ominty Dictation** | `Super+Alt+T` | whisper.cpp + `wtype` |
+| **Ominty Capture** | `Ctrl+Alt+R` | `grim`, `slurp`, `tesseract-ocr` |
+
+The canonical names for every surface are in [NAMING.md](NAMING.md);
+user-facing strings must use them.
+
+**Ominty Media folders.** The launcher discovers playlists by directory, so
+`install.sh` creates `~/Playlist/{Audio,Courses,Music,Video}` with a README.
+Drop `*.m3u`/`*.m3u8`/`*.pls` files there; there is no database to import.
 
 `omi-dict` and `omi-media` are symlinked into `~/.local/bin` (their `bin/`
 scripts resolve `../src` through the symlink). Ominty's six DMS plugins are
@@ -171,6 +178,9 @@ author's account configuration.
 
 Two things are data rather than code, and are too large for git:
 
+- **Document extraction tools** — Ominty Reader needs `pandoc`,
+  `poppler-utils` and `catdoc` for `.md`/`.docx`/`.epub`, `.pdf` and `.doc`.
+  They are in the `tts` layer; without them only `.txt` works.
 - **Dictionaries** — the `.bgl` sources import to roughly 800 MB under
   `~/.local/share/omi/`. Run `scripts/omi-dict-import.sh [DIR]` (it maps the
   common filenames to the ids the shipped config expects). Without it the

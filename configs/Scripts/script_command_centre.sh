@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# script_hub.sh — Zenity Script Hub / Control Panel
+# script_command_centre.sh — Ominty Scripts / Control Panel
 # Scans subdirectories, shows a "Main Screen" of toolkits,
 # and lets the user pick and run one script at a time.
 #
@@ -14,7 +14,7 @@ has_cmd() { command -v "$1" >/dev/null 2>&1; }
 die() {
   local msg="${1:-Unknown error}"
   if has_cmd zenity; then
-    zenity --error --title="Script Hub" --width=480 --no-markup \
+    zenity --error --title="Ominty Scripts" --width=480 --no-markup \
       --text="$msg" || true
   else
     echo "ERROR: $msg" >&2
@@ -118,8 +118,8 @@ discover_scripts_in_toolkit() {
 # ---------- intro screen ----------
 
 show_intro() {
-  zenity --info --title="Script Hub – Overview" --width=600 --no-markup \
-    --text="Welcome to the Script Hub.
+  zenity --info --title="Ominty Scripts – Overview" --width=600 --no-markup \
+    --text="Welcome to Ominty Scripts.
 
 This tool acts as a control panel for your scripts.
 
@@ -163,7 +163,7 @@ Create one or more subdirectories with scripts and README.md files."
 
   local choice
   choice="$(zenity --list \
-    --title="Script Hub – Main Screen" \
+    --title="Ominty Scripts – Main Screen" \
     --width=780 --height=480 \
     --ok-label="Open toolkit" \
     --cancel-label="Quit" \

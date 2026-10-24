@@ -22,33 +22,33 @@ trap cleanup EXIT
 
 # 1. Take an area screenshot (interactive crosshair)
 #    X11 (Cinnamon) uses gnome-screenshot; Wayland (Niri) uses grim + slurp.
-notify-send -t 1500 "Screen OCR" "Select an area to OCR..."
+notify-send -t 1500 "Ominty Capture" "Select an area to OCR..."
 
 if [ -n "${WAYLAND_DISPLAY:-}" ]; then
   if ! command -v slurp >/dev/null 2>&1; then
-    notify-send -u critical "Screen OCR" \
+    notify-send -u critical "Ominty Capture" \
       "slurp is required for Wayland area select (apt install slurp)"
     exit 1
   fi
   geometry="$(slurp 2>/dev/null || true)"
   if [ -z "$geometry" ]; then
-    notify-send "Screen OCR" "Cancelled — no area selected"
+    notify-send "Ominty Capture" "Cancelled — no area selected"
     exit 1
   fi
   if ! grim -g "$geometry" "$SCREENSHOT" 2>/dev/null; then
-    notify-send -u critical "Screen OCR" "Screenshot failed"
+    notify-send -u critical "Ominty Capture" "Screenshot failed"
     exit 1
   fi
 else
   if ! gnome-screenshot -a -f "$SCREENSHOT" 2>/dev/null; then
-    notify-send -u critical "Screen OCR" "Screenshot cancelled or failed"
+    notify-send -u critical "Ominty Capture" "Screenshot cancelled or failed"
     exit 1
   fi
 fi
 
 # Check if screenshot was actually taken (user might have pressed Escape)
 if [ ! -s "$SCREENSHOT" ]; then
-  notify-send "Screen OCR" "Cancelled — no area selected"
+  notify-send "Ominty Capture" "Cancelled — no area selected"
   exit 1
 fi
 
@@ -59,7 +59,7 @@ tesseract "$SCREENSHOT" "$TMPDIR/screen-ocr-$TIMESTAMP" 2>/dev/null
 TEXT=$(cat "$CLEANUP" 2>/dev/null | sed '/^$/d')
 
 if [ -z "$TEXT" ]; then
-  notify-send -u critical "Screen OCR" "No text found in selection"
+  notify-send -u critical "Ominty Capture" "No text found in selection"
   exit 1
 fi
 
@@ -70,6 +70,6 @@ echo -n "$TEXT" | "$CLIP_TOOL" copy
 LINE_COUNT=$(echo "$TEXT" | wc -l)
 CHAR_COUNT=$(echo -n "$TEXT" | wc -c)
 PREVIEW=$(echo "$TEXT" | head -3)
-notify-send -t 3000 "Screen OCR" "${PREVIEW}${LINE_COUNT:+
+notify-send -t 3000 "Ominty Capture" "${PREVIEW}${LINE_COUNT:+
 — ${LINE_COUNT} lines, ${CHAR_COUNT} chars —}
 Copied to clipboard"

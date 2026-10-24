@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Piper TTS System Tray Indicator (dual-mode: X11 StatusIcon + Wayland SNI)
+"""Ominty Reader System Tray Indicator (dual-mode: X11 StatusIcon + Wayland SNI)
 
 States: idle → processing → ready → playing ⇄ paused → done → idle
 
@@ -183,7 +183,7 @@ class StatusIconHost(IconHost):
     def __init__(self, icons):
         self.icons = icons
         self.icon = Gtk.StatusIcon()
-        self.icon.set_title('Piper TTS')
+        self.icon.set_title('Ominty Reader')
         self.icon.set_name('piper-indicator')
         self.icon.set_visible(True)
 
@@ -257,7 +257,7 @@ class SniHost(IconHost):
 
 
 class PiperIndicator:
-    """System tray indicator for Piper TTS with playback control."""
+    """System tray indicator for Ominty Reader with playback control."""
 
     def __init__(self):
         Gst.init(None)
@@ -282,7 +282,7 @@ class PiperIndicator:
         else:
             self.host = StatusIconHost(self.icons)
 
-        self.host.set_tooltip('Piper TTS — Ready')
+        self.host.set_tooltip('Ominty Reader — Ready')
 
         # --- Context Menu (right-click) ---
         self.menu = Gtk.Menu()
@@ -366,7 +366,7 @@ class PiperIndicator:
         # --- Update icon ---
         if new_state == 'idle':
             self._set_icon('green')
-            self.host.set_tooltip('Piper TTS — Ready')
+            self.host.set_tooltip('Ominty Reader — Ready')
             self.state_item.set_label('Ready')
             self.action_item.set_label('Play')
             self.action_item.set_sensitive(False)
@@ -375,7 +375,7 @@ class PiperIndicator:
             self.status_item.set_sensitive(False)
 
         elif new_state == 'processing':
-            self.host.set_tooltip('Piper TTS — Generating speech…')
+            self.host.set_tooltip('Ominty Reader — Generating speech…')
             self.state_item.set_label('Generating speech…')
             self.action_item.set_label('Play')
             self.action_item.set_sensitive(False)
@@ -387,7 +387,7 @@ class PiperIndicator:
             self.flash_timer_id = GLib.timeout_add(600, self._flash_tick)
 
         elif new_state == 'ready':
-            self.host.set_tooltip('Piper TTS — Ready to play')
+            self.host.set_tooltip('Ominty Reader — Ready to play')
             self.state_item.set_label('Ready to play')
             self.action_item.set_label('Play')
             self.action_item.set_sensitive(True)
@@ -397,7 +397,7 @@ class PiperIndicator:
             self._set_icon('play')
 
         elif new_state == 'playing':
-            self.host.set_tooltip('Piper TTS — Playing (click to pause)')
+            self.host.set_tooltip('Ominty Reader — Playing (click to pause)')
             self.state_item.set_label('Playing')
             self.action_item.set_label('Pause')
             self.action_item.set_sensitive(True)
@@ -407,7 +407,7 @@ class PiperIndicator:
             self._set_icon('pause')
 
         elif new_state == 'paused':
-            self.host.set_tooltip('Piper TTS — Paused (click to resume)')
+            self.host.set_tooltip('Ominty Reader — Paused (click to resume)')
             self.state_item.set_label('Paused')
             self.action_item.set_label('Resume')
             self.action_item.set_sensitive(True)
@@ -417,7 +417,7 @@ class PiperIndicator:
             self._set_icon('play')
 
         elif new_state == 'done':
-            self.host.set_tooltip('Piper TTS — Done')
+            self.host.set_tooltip('Ominty Reader — Done')
             self.state_item.set_label('Done')
             self.action_item.set_label('Play')
             self.action_item.set_sensitive(False)
