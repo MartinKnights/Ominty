@@ -109,17 +109,18 @@ say "DMS source: $commit ($(git -C "$DMS_SRC" log -1 --format=%s))"
 # --- 3. Build -------------------------------------------------------------
 installed="$PREFIX/bin/dms"
 stamp="$(cat "$STAMP" 2>/dev/null || true)"
-if [ "$FORCE" -ne 1 ] && [ -x "$installed" ] && [ "$stamp" = "$commit" ]; then
+# The stamp records the commit *and* the version it was built with, so a
+# change in the version scheme rebuilds once. The first scheme wrote a bare
+# commit, which is why machines upgraded from it still reported "(git) v-1".
+version_tag="ominty-pinned+$commit"
+if [ "$FORCE" -ne 1 ] && [ -x "$installed" ] && [ "$stamp" = "$commit $version_tag" ]; then
     say "DMS $commit already installed at $installed"
 else
     say "Building DMS $commit (this takes a minute)…"
-    # Pin the version string: the Makefile falls back to `git describe`, which
-    # yields nonsense ("(git) v-1") when the shallow clone has no tags. This
-    # value is what `ominty inspect` and the verify script report.
-    ( cd "$DMS_SRC" && make -C core VERSION="ominty-pinned+$commit" build ) \
+    ( cd "$DMS_SRC" && make -C core VERSION="$version_tag" build ) \
         || die "DMS build failed"
     install -m 0755 "$DMS_SRC/core/bin/dms" "$installed" || die "DMS install failed"
-    printf '%s\n' "$commit" > "$STAMP"
+    printf '%s %s\n' "$commit" "$version_tag" > "$STAMP"
 fi
 
 [ -f "$DIST/.dankrev" ] || die "shell dist missing at $DIST"
