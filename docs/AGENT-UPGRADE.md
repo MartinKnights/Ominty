@@ -118,6 +118,7 @@ Nothing here changes the machine. Capture all output.
 ```bash
 ./ominty-core/cli/ominty inspect --json > /tmp/ominty-before.json || true
 ./ominty-core/cli/ominty inspect
+set -o pipefail
 ./install.sh --dry-run | tee /tmp/ominty-dryrun.log
 ```
 
@@ -194,7 +195,7 @@ sudo -n true 2>/dev/null && echo "SUDO: non-interactive" || echo "SUDO: needs a 
 
 ```bash
 set -o pipefail
-./install.sh 2>&1 | tee /tmp/ominty-install.log
+./install.sh 2>&1 | tee "$HOME/ominty-install-$(date +%F).log"
 echo "installer exit: ${PIPESTATUS[0]}"
 ```
 
@@ -204,7 +205,7 @@ A background shell cannot answer an interactive password prompt reliably.
 Hand the single command to the user and say exactly this:
 
 > Run this in your terminal and leave it running — I'll read the log:
-> `cd <repo> && ./install.sh 2>&1 | tee /tmp/ominty-install.log`
+> `cd <repo> && ./install.sh 2>&1 | tee "$HOME/ominty-install-$(date +%F).log"`
 
 Wait for them to finish, then continue. Do not attempt to work around sudo.
 
@@ -336,7 +337,7 @@ cosmetic = confusing message or doc gap.
 - Config files replaced that the user had customised (and did the backup help)?
 
 ## Evidence
-- installer log: /tmp/ominty-install.log
+- installer log: ~/ominty-install-<date>.log
 - dry-run: /tmp/ominty-dryrun.log
 - verify output: /tmp/ominty-verify.log, /tmp/ominty-parity.log
 - before/after JSON: /tmp/ominty-before.json, /tmp/ominty-after.json

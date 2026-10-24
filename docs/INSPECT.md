@@ -243,14 +243,26 @@ Finding ids are stable and namespaced: `platform`, `hardware.*`, `desktop.*`,
 ```json
 {
   "ready": false,
-  "blocking": ["config.ominty_cli", "config.ominty_hook"],
-  "warnings": ["layer.cli", "choice.llm.provider"],
-  "required_choices": ["llm.provider", "session.default", "config.migration"],
+  "blocking": ["layer.desktop"],
+  "warnings": ["config.ominty_cli", "choice.llm.provider"],
+  "required_choices": ["session.default", "config.migration"],
   "counts": {"pass": 6, "warn": 12, "fail": 2}
 }
 ```
 
 `ready` is `not summary.blocking`.
+
+**`blocking` is not one thing.** Read the ids:
+
+| Id prefix | Meaning | Action |
+| --- | --- | --- |
+| `platform.*`, `hardware.*` | the machine is not supported | stop |
+| `config.*` | a previous install is broken (dead symlink) | stop; re-run `install.sh` |
+| `layer.*` | packages are missing | **expected before an install** — the installer adds them |
+
+A missing CLI/hook symlink (`config.ominty_cli`, `config.ominty_hook`) is a
+**warning**, not a blocker: the installer creates it. A *broken* symlink is
+still blocking.
 
 **Outstanding choices do not affect `ready`.** A question waiting for an answer
 is not a failure. Read `required_choices` separately and ask.

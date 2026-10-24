@@ -116,7 +116,7 @@ backup_existing() {  # backup_existing <path>
   [ -e "$p" ] || return 0
   local bak="${p}.bak-ominty-$(date +%Y%m%d-%H%M%S)"
   run cp -a "$p" "$bak"
-  say "Backed up existing $p -> $bak"
+  [ "$DRY_RUN" -eq 1 ] || say "Backed up existing $p -> $bak"
 }
 
 backup_if_changed() {  # backup_if_changed <new-source> <dest>
@@ -128,7 +128,7 @@ backup_if_changed() {  # backup_if_changed <new-source> <dest>
   cmp -s "$src" "$dest" && return 0
   local bak="${dest}.bak-ominty-$(date +%Y%m%d-%H%M%S)"
   run cp -a "$dest" "$bak"
-  say "Backed up modified $dest -> $bak"
+  [ "$DRY_RUN" -eq 1 ] || say "Backed up modified $dest -> $bak"
 }
 
 have_repo_line() {  # have_repo_line <suite>
@@ -147,12 +147,10 @@ apt_install_resilient() {  # apt_install_resilient <package>...
   local p available=() missing=()
   for p in "$@"; do
     [ -n "$p" ] || continue
-    # Already provided outside apt (e.g. a hand-installed zellij)? Leave it
-    # alone: reinstalling would either fail or shadow the user's copy.
-    if command -v "$p" >/dev/null 2>&1; then
-      say "Already present on PATH, not installing: $p"
-      continue
-    fi
+    # If no configured source provides the name it is skipped below; a package
+    # that *is* available is installed even when a hand-built copy exists on
+    # PATH, because `inspect` judges the layer by dpkg and would otherwise
+    # report the layer as incomplete forever.
     if apt-cache show "$p" >/dev/null 2>&1; then
       available+=("$p")
     else
@@ -200,9 +198,17 @@ add_obs_repositories() {
     base="https://download.opensuse.org/repositories/${project}/${OBS_SUITE}"
     if [ ! -s "$keyring" ]; then
       say "Importing signing key for ${project}..."
-      run curl -fsSL "$base/Release.key" --output "$base/Release.key.tmp"
-    run sudo gpg --dearmor --yes -o "$keyring" "$base/Release.key.tmp"
-    run rm -f "$base/Release.key.tmp"
+      if [ "$DRY_RUN" -eq 1 ]; then
+        plan "curl -fsSL $base/Release.key -o <tmp>"
+        plan "sudo gpg --dearmor --yes -o $keyring <tmp>"
+      else
+        key_tmp="$(mktemp)"
+        curl -fsSL "$base/Release.key" -o "$key_tmp" \
+          || { rm -f "$key_tmp"; die "Could not download the signing key for ${project}."; }
+        sudo gpg --dearmor --yes -o "$keyring" "$key_tmp" \
+          || { rm -f "$key_tmp"; die "Could not import the signing key for ${project}."; }
+        rm -f "$key_tmp"
+      fi
     fi
     if [ ! -f "$list" ]; then
       say "Adding APT source ${project}/${OBS_SUITE}..."
@@ -644,25 +650,45 @@ fi
 # 2026-10-22: 15 restarts while the verify script reported OK). Test stability
 # over a window, then fall back rather than leaving the user with no shell.
 DMS_FAILED=0
+INSTALL_SESSION=0
 if [ "$DRY_RUN" -eq 1 ]; then
-  plan "scripts/smoke-dms.sh --restart   # verify the shell stays up"
+  plan "scripts/smoke-dms.sh --restart   # verify the shell stays up (after login)"
 else
   SMOKE="$REPO_DIR/scripts/smoke-dms.sh"
   ROLLBACK="$REPO_DIR/scripts/rollback-dms.sh"
-  if [ -x "$SMOKE" ]; then
-    if ! "$SMOKE" --restart; then
-      warn "The pinned DMS shell did not stay up."
-      [ -x "$ROLLBACK" ] && { "$ROLLBACK" --overlay-off || true; }
-      if ! "$SMOKE"; then
-        if [ -f /usr/lib/systemd/user/dms.service ] && [ -x "$ROLLBACK" ]; then
-          warn "Still failing; restoring the packaged dms.service."
-          "$ROLLBACK" --to-packaged || true
-        fi
-        "$SMOKE" || DMS_FAILED=1
-      fi
-    fi
-  else
+  # dms.service is Requisite=graphical-session.target. Before the first Niri
+  # login there is no session to test, so a crash-loop verdict is impossible —
+  # that is a SKIP, not a failure. The runbook verifies after login.
+  if [ ! -x "$SMOKE" ]; then
     warn "scripts/smoke-dms.sh is missing; cannot verify that the shell runs."
+  elif ! pgrep -x niri >/dev/null 2>&1; then
+    # graphical-session.target is also active under GNOME/Cinnamon, where a
+    # DMS crash says nothing about the Niri session. Only test under niri.
+    warn "No Niri session is running; skipping the shell smoke test."
+    warn "After logging into Niri, run: scripts/smoke-dms.sh"
+  else
+    INSTALL_SESSION=1
+    smoke_rc=0
+    "$SMOKE" --restart || smoke_rc=$?
+    case "$smoke_rc" in
+      0) : ;;
+      3) warn "Cannot judge the shell yet (no session); verify after login." ;;
+      *)
+        warn "The pinned DMS shell did not stay up."
+        [ -x "$ROLLBACK" ] && { "$ROLLBACK" --overlay-off || true; }
+        smoke_rc=0
+        "$SMOKE" || smoke_rc=$?
+        if [ "$smoke_rc" -ne 0 ]; then
+          if [ -f /usr/lib/systemd/user/dms.service ] && [ -x "$ROLLBACK" ]; then
+            warn "Still failing; restoring the packaged dms.service."
+            "$ROLLBACK" --to-packaged || true
+          fi
+          smoke_rc=0
+          "$SMOKE" || smoke_rc=$?
+          [ "$smoke_rc" -eq 0 ] || DMS_FAILED=1
+        fi
+        ;;
+    esac
   fi
 fi
 
@@ -732,6 +758,11 @@ if [ "${DMS_FAILED:-0}" -eq 1 ]; then
   warn "The DMS shell is NOT running. Everything else installed."
   warn "Run scripts/diagnose-dms-shell.sh and keep ~/ominty-dms-matrix-*.md."
   exit 1
+fi
+
+if [ "$DRY_RUN" -eq 0 ] && [ "${INSTALL_SESSION:-0}" -eq 0 ]; then
+  say "Shell smoke test skipped (no graphical session). Verify after login:"
+  say "  scripts/smoke-dms.sh && scripts/verify-upgrade.sh && scripts/verify-parity.py"
 fi
 
 say "Done. Log out and select the 'Niri' session at the display manager."

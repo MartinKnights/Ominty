@@ -24,8 +24,8 @@ should become Ominty.
 > 2. Read `AGENTS.md`, then follow `docs/AGENT-INSTALL.md` end to end.
 > 3. Do the read-only assessment before changing anything, and ask me the
 >    required questions it lists. Do not guess answers.
-> 4. Show me the `./install.sh --dry-run` plan and wait for my go-ahead before
->    installing.
+> 4. Show me the plan for approval (the runbook's Phase 5 dry run) and wait for
+>    my go-ahead before installing.
 > 5. Stop and tell me if a gate fails. Do not improvise around a failure, and do
 >    not remove packages or edit the repository.
 > 6. When it finishes, run the verification scripts in Phase 6 and report what

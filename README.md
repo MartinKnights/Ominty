@@ -30,16 +30,17 @@ Copy this into your agent (Claude Code, opencode, Codex, Cursor — anything wit
 shell access):
 
 > You are setting up Ominty on this machine. Read `AGENTS.md`, then follow
-> `docs/AGENT-INSTALL.md` end to end. Do the read-only assessment first, ask me
-> the required questions, show me the dry-run plan, and stop if a gate fails.
-> When it finishes, run the verification scripts and tell me what still needs me.
+> `docs/AGENT-INSTALL.md` end to end. Do the read-only assessment and ask me the
+> required questions first, then show me the plan for my approval. Stop if a
+> gate fails. After the first login, run the verification scripts and tell me
+> what still needs me.
 
 The agent reads the repository as its instructions — assessment, questions,
 plan, install, verification, report. More prompts (upgrade, repair) and the
 rules it must follow: [docs/PROMPTS.md](docs/PROMPTS.md).
 
-> **Requirements:** Debian 13 (trixie) or LMDE 7 (gigi), x86_64, `sudo`, about
-> 10 GB free and a network connection. Ubuntu 24.04-family is supported through
+> **Requirements:** Debian 13 (trixie) or LMDE 7 (gigi), x86_64, `git`,
+> `curl`, `gpg`, `python3`, `sudo`, about 10 GB free and a network connection. Ubuntu 24.04-family is supported through
 > the source build; see [docs/UBUNTU.md](docs/UBUNTU.md).
 
 ---

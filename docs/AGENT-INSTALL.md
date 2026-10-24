@@ -8,7 +8,7 @@
 
 There are **two deliverables**:
 
-1. a working desktop, verified (Phase 7);
+1. a working desktop, verified (Phase 8);
 2. a **setup report** at `~/ominty-setup-report-<date>.md` (Phase 10).
 
 An install that produced no report is an incomplete run.
@@ -43,6 +43,12 @@ Commands are bash. Run them from the repository root unless stated otherwise.
 cat /etc/os-release
 uname -m
 df -h "$HOME" | tail -1
+for c in git curl gpg python3 sudo systemctl; do
+  command -v "$c" >/dev/null || echo "MISSING: $c"
+done
+for h in github.com download.opensuse.org huggingface.co dl.google.com; do
+  curl -fsSI --max-time 8 "https://$h" >/dev/null 2>&1 || echo "unreachable: $h"
+done
 ```
 
 | Gate | Pass condition |
@@ -50,7 +56,10 @@ df -h "$HOME" | tail -1
 | Distribution | `ID=debian` + `VERSION_CODENAME=trixie`, **or** `ID=linuxmint` + `VERSION_CODENAME=gigi`, **or** Ubuntu-family with `UBUNTU_CODENAME` (Mint exposes it) |
 | Architecture | `x86_64` |
 | Free space | ≥ 10 GB under `$HOME` |
-| Network | `curl -fsSI https://github.com >/dev/null` succeeds |
+| Required tools | `git`, `curl`, `gpg`, `python3`, `sudo`, `systemctl` |
+| Network — required | `github.com` (source pins, plugins) and `download.opensuse.org` (the OBS signing key; the installer aborts without it) |
+| Network — required if `go` is absent | `dl.google.com` (the installer downloads Go) |
+| Network — optional | `huggingface.co` (the ~142 MB whisper model; the rest of the install succeeds without it) |
 
 **Stop conditions:** Debian 12 / LMDE 6 (`bookworm`, `faye`) — no
 `trixie-backports`, so Quickshell cannot be installed; any other distribution;
@@ -86,7 +95,8 @@ git -C <repo> submodule update --init --recursive
 ```sh
 ./ominty-core/cli/ominty inspect --json > /tmp/ominty-before.json || true
 ./ominty-core/cli/ominty inspect
-./install.sh --dry-run | tee /tmp/ominty-dryrun.log
+set -o pipefail
+./install.sh --dry-run | tee /tmp/ominty-dryrun.log   # sanity: the plan exists
 ```
 
 `inspect` exits `1` when there is a blocking finding; the JSON is still valid.
@@ -143,19 +153,25 @@ Record the path in the report. `install.sh` also makes per-file backups.
 
 ## 5. Phase 4 — ask the required questions
 
-From `summary.required_choices`, one at a time:
+Ask only what is in `summary.required_choices`, one at a time. If a decision is
+already resolved in the JSON, do not ask it again.
 
-| Choice | What to ask |
+| Choice | What to ask | How the answer is applied |
+| --- | --- | --- |
+| `llm.provider` | Which provider (or `none`), quoting availability | **No installer flag.** The installer writes `~/.config/ominty/ai.toml` from the template if absent. After the install, with consent, set `[ai] default_provider` to the chosen provider. For `none`, set it to `none`: the AI actions then report an unavailable provider and nothing is downloaded. (The `enabled` keys are not read by this build.) |
+| `session.default` | Should Niri become the default session? | **No installer flag.** Niri is selectable at login either way. If they want it default, point them at their display manager's session setting (on LMDE: the *Login Window* tool); do not edit system files yourself. |
+| `config.migration` | Is replacing existing configuration (with backups) acceptable? | **No keep flag.** `install.sh` always backs up to `.bak-ominty-<ts>` and replaces. If the user wants to keep their configuration, stop and do the [MIGRATION.md](MIGRATION.md) assessment, or merge manually afterwards. |
+
+Optional choices, and the exact switch:
+
+| Choice | How to apply |
 | --- | --- |
-| `llm.provider` | Which AI provider (or `none`). Quote which options are available. |
-| `session.default` | Should Niri become the default session? Confirm a fallback stays selectable. |
-| `config.migration` | Is it acceptable to replace existing configuration (with backups)? |
+| `layers` | `--layers "desktop tts …"` |
+| `plugins.dms` | `--no-plugins` (there is no plugins layer) |
+| `tts.enabled` | include or omit `tts` in `--layers` |
+| `desktop.shell_overlay` | no flag — it is applied automatically when the patch matches the built shell |
 
-Optional, but confirm: which `layers`, whether to install DMS plugins, whether to
-enable the shell overlay, whether to enable TTS/dictation.
-
-Pass the answers as flags, e.g. `--layers "desktop tts terminal editor cli
-containers browser"`.
+Never write to the repository to record an answer.
 
 ---
 
@@ -183,49 +199,89 @@ sudo -n true 2>/dev/null && echo "SUDO: non-interactive" || echo "SUDO: needs a 
 
 ```sh
 set -o pipefail
-./install.sh --layers "<chosen>" 2>&1 | tee /tmp/ominty-install.log
+./install.sh --layers "<chosen>" 2>&1 | tee "$HOME/ominty-install-$(date +%F).log"
 echo "installer exit: ${PIPESTATUS[0]}"
 ```
 
 **Mode B — password required:** hand the user this command and wait:
 
 > Run this in your terminal and leave it running — I'll read the log:
-> `cd <repo> && ./install.sh --layers "<chosen>" 2>&1 | tee /tmp/ominty-install.log`
+> `cd <repo> && ./install.sh --layers "<chosen>" 2>&1 | tee "$HOME/ominty-install-$(date +%F).log"`
 
-**Gate 6:** exit `0`. Warnings are acceptable (optional layers, skipped packages,
-Piper). A non-zero exit means the shell failed its smoke test — go to the
-failure playbook and still write the report.
+**Gate 6:** exit `0`. Warnings are acceptable (optional layers, skipped
+packages, Piper). A non-zero exit means a fatal step failed — the log says
+which; it is only the shell smoke test if the last lines say so. Either way,
+capture the log and still write the report.
 
-Record: elapsed time, number of warnings, and any package the installer skipped.
+The installer **skips the shell smoke test when Niri is not running** (a fresh
+machine, a TTY, or a migration from another desktop). That is expected:
+`dms.service` is `Requisite=graphical-session.target`, so it cannot run until the
+first Niri login. Verification happens in Phase 8.
+
+Pre-login sanity, which does not need a session:
+
+```sh
+./ominty-core/cli/ominty inspect --json > /tmp/ominty-after.json || true
+"$HOME/.local/bin/dms" version          # ominty-pinned+<sha>
+~/.local/bin/quickshell --version        # Quickshell 0.3.1
+./ominty-core/cli/ominty registry validate
+niri validate
+```
 
 ---
 
-## 8. Phase 7 — verify
+## 8. Phase 7 — first login
+
+Ask the user to log out and select **Niri** at the display manager (a reboot is
+not required; this is a different session, not a new machine). The startup
+entries — Piper, the reader/dictation popups, swayidle — only run in a fresh
+session.
+
+**If you are running inside the session being replaced** (a terminal in
+Cinnamon, for example), logging out ends your own process. In that case:
+
+- run the agent over SSH or from a TTY so you survive the logout, **or**
+- finish the pre-login checks, hand the user the Phase 8 command block, and
+  resume afterwards.
+
+Never claim verification you did not run. The report records what was actually
+checked.
+
+On a migration, tell them the old session stays selectable.
+
+---
+
+## 9. Phase 8 — verify (after login)
+
+Run **inside the Niri session**:
 
 ```sh
 ./scripts/smoke-dms.sh
 ./scripts/verify-upgrade.sh | tee /tmp/ominty-verify.log
 ./scripts/verify-parity.py  | tee /tmp/ominty-parity.log
-./ominty-core/cli/ominty registry validate
-niri validate
 ```
 
 | Check | Expected |
 | --- | --- |
+| `smoke-dms.sh` | exit 0: stable, `NRestarts` unchanged, IPC answers |
+| `verify-upgrade.sh` | 0 failed, or a recorded overlay finding (see below) |
+| `verify-parity.py` | 0 failed |
 | `dms version` | `dms ominty-pinned+<commit>` — **not** `2.0.0`, not `(git) v-1` |
-| `~/.local/bin/quickshell --version` | `Quickshell 0.3.1` |
 | `systemctl --user cat dms.service` | `ExecStart=.../.local/bin/dms` |
-| `DMS_SHELL_DIR` in the unit environment | set to `~/.local/share/dms-shell` |
+| `DMS_SHELL_DIR` in the unit environment | `~/.local/share/dms-shell` |
 | overlay marker | `"base":"c27a2bbcb6e09e50"` |
 | `platform.desktop_source` | `source` |
 | `summary.ready` | `true` |
 | `layers.desktop.satisfied` | `true` |
-| `verify-upgrade.sh` / `verify-parity.py` | 0 failed |
 
-Save the post-install JSON:
+If the overlay was skipped (`apply.sh` exit 1 or 3), `verify-upgrade.sh` will
+report the missing marker. That is a **finding to record**, not a pass: the
+stock shell is running. Apply it once DMS has started:
 
 ```sh
-./ominty-core/cli/ominty inspect --json > /tmp/ominty-after.json
+configs/dms/shell-overlay/apply.sh --check
+configs/dms/shell-overlay/apply.sh
+systemctl --user daemon-reload && systemctl --user restart dms.service
 ```
 
 Then ask the user to confirm what a machine cannot: the accent glow, the spring
@@ -234,24 +290,22 @@ animation, and the six Ominty keys (`Shift+Alt+M`, `Ctrl+Shift+A`,
 
 ---
 
-## 9. Phase 8 — first login and data
+## 10. Phase 9 — optional data
 
-1. Ask the user to log out and select **Niri** at the display manager (a reboot
-   is not required). The startup entries only run in a fresh session.
-2. Optional data — offer, do not force:
+Offer, do not force:
 
 | Data | Command | Effect if skipped |
 | --- | --- | --- |
 | Dictionaries | `scripts/omi-dict-import.sh ~/Documents/Dictionaries` | Dictionary popup says it is unavailable |
 | Playlists | drop `.m3u` files in `~/Playlist/<folder>/` | Media launcher says no folders have playlists |
 | Wallpapers | put images in `~/Wallpapers` | Carousel is empty |
-| AI provider | configure in `~/.config/ominty/ai.toml` | AI actions are unavailable |
+| AI provider | edit `~/.config/ominty/ai.toml` with the user | AI actions are unavailable |
 
 Never invent dictionary or media content. Ask where the files are.
 
 ---
 
-## 10. Phase 9 — setup report
+## 11. Phase 10 — setup report
 
 Write `~/ominty-setup-report-<YYYY-MM-DD>.md`:
 
@@ -270,7 +324,7 @@ Write `~/ominty-setup-report-<YYYY-MM-DD>.md`:
 - Manual interventions: <count> (list)
 
 ## Verification
-- smoke-dms: pass/fail
+- smoke-dms: pass/fail/skip (reason)
 - verify-upgrade: N passed / N failed
 - verify-parity: N passed / N failed
 - dms version / quickshell version / overlay base:
@@ -290,19 +344,21 @@ Print it to the user and give the path.
 
 ---
 
-## 11. Failure playbook
+## 12. Failure playbook
 
 | Symptom | Response |
 | --- | --- |
-| Gate 0 fails (distro/arch/space) | Stop. Report the values. |
+| Gate 0 fails (distro/arch/space/missing tools) | Stop. Report the values. |
 | `git clone`/submodule fails | Check network and HTTPS; `git submodule sync --recursive` then retry. |
-| `inspect` has a platform/hardware blocking finding | Stop. |
+| `inspect` has a `platform.*` or `hardware.*` blocking finding | Stop. |
+| `inspect` reports blocking `layer.*` findings | Expected before an install: the installer adds those packages. Continue. |
 | Dry run missing a build step | The checkout is stale — redo Phase 1. |
 | apt failure | The installer skips unresolvable names; if the *required* layer is affected, capture the apt output and stop. |
 | Quickshell build fails | Re-run `scripts/source/quickshell-build.sh` alone for a clean error; capture it. |
 | DMS build fails | Re-run `scripts/source/dms-build.sh`; capture it. |
-| Shell crash-loops after install | The installer already fell back and exited non-zero. Run `scripts/collect-diagnostics.sh`, keep `~/ominty-dms-matrix-*.md` from `scripts/diagnose-dms-shell.sh`, and report. |
-| Overlay `not-applicable` | Not fatal: stock shell runs. Record it and continue. |
+| Installer exit non-zero | Read `~/ominty-install-<date>.log`. If it ends in the shell smoke test, the installer already fell back; run `scripts/collect-diagnostics.sh`. Otherwise a fatal step failed — report it. |
+| Shell crash-loops after login | `scripts/collect-diagnostics.sh`, keep `~/ominty-dms-matrix-*.md` from `scripts/diagnose-dms-shell.sh`, report. |
+| Overlay `not-applicable` | Not fatal: the stock shell runs. Record it and continue. |
 | Overlay exit 3 | Start DMS once, then `configs/dms/shell-overlay/apply.sh`. |
 | Plugin patch does not apply | Upstream moved. Report; do not hand-edit the plugin. |
 | `niri validate` fails | Do not tell the user to log in. Report the error. |
@@ -320,10 +376,11 @@ confirmation.
 
 ---
 
-## 12. Definition of done
+## 13. Definition of done
 
-- [ ] Phases 0–7 completed, or stopped at a documented gate.
-- [ ] All verification commands run and their results recorded.
+- [ ] Phases 0–8 completed, or stopped at a documented gate.
+- [ ] Verification run **after** the first Niri login, with results recorded.
+- [ ] Overlay state recorded as applied or as an explicit finding.
 - [ ] User asked to confirm the visual/animation result and the six keys.
 - [ ] `~/ominty-setup-report-<date>.md` written and its path given to the user.
 - [ ] Repository still clean (`git status --short` empty apart from ignored files).

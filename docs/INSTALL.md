@@ -13,7 +13,8 @@ environment and preserves whatever is not deliberately replaced.
   `trixie-backports`.
 - **x86_64**.
 - A user account with **sudo** access.
-- **curl** and **gpg** — used to import the third-party signing keys.
+- `git`, **curl**, **gpg**, `python3` — git for the checkout, the others for the
+  signing keys and the CLI.
 - **~10 GB free** under your home directory: Quickshell and DMS are built from
   source, plus a ~142 MB speech model on first install.
 - An internet connection (APT keys from `download.opensuse.org`; source pins
@@ -46,36 +47,36 @@ git submodule update --init --recursive
 ./install.sh
 ```
 
-The installer is **idempotent** — re-running it is safe. It will:
+The installer is **idempotent** — re-running it is safe. In order, it:
 
-1. Add the required APT repositories (see *Third-party repositories* below),
-   ensure `trixie-backports` is enabled, and pin `quickshell` to Debian's build.
-2. Install system packages via `apt`: `quickshell` (trixie-backports), plus
-   pipewire, xwayland, portals, `fuzzel`, terminals, browser, and file manager
-   from Debian. The optional `tts` layer adds the Ayatana tray typelib, Python
-   GI bindings and the GStreamer plugins used by the Piper indicator.
-3. Install **DMS**, **matugen**, and **ghostty** from the AvengeMedia Open
-   Build Service (they are not in Debian).
-4. Install **Niri** and **xwayland-satellite** from the prebuilt `.deb`s in
-   `packages/`.
-5. Deploy the Niri configuration and DMS fragments to `~/.config/niri/`.
-6. Deploy the DMS shell settings and plugin settings to
-   `~/.config/DankMaterialShell/`.
-7. Deploy the Ominty configuration to `~/.config/ominty/` (existing user
-   config is **kept**).
-8. Symlink the `ominty` and `ominty-hook` CLIs into `~/.local/bin/`.
-9. Generate the Niri bindings fragment from the action registry.
-10. Install the DMS plugins (Ominty Actions, Ominty Keybinds, and the
-    third-party set: dankHooks, dankKDEConnect, dankLauncherKeys,
-    quickCapture, wallpaperCarousel).
-11. Build DMS from the pinned source commit and install the helper scripts
-    (`configs/bin`, `configs/local-bin`, `configs/Scripts`), the Quickshell
-    voice/TTS config links, and the `swayidle` unit.
-12. If a pristine DMS shell tree is available, verify and apply the Ominty
-    motion + accent-glow overlay, then write the `dms.service` drop-in that
-    points DMS at the fork. The tree is found automatically (build cache,
-    runtime extraction or package) — see *DMS shell overlay* below.
-13. Validate the registry and the Niri config.
+1. Adds the AvengeMedia `danklinux` repository, enables `trixie-backports`, and
+   writes the `quickshell` APT pin (that pin only matters for the fallback
+   package; Quickshell is built in step 3).
+2. Installs the packages for the selected layers from `apt`, resolving each
+   name first and skipping anything no source provides.
+3. Builds **Quickshell `v0.3.1`** into `~/.local` (skipped when the pin is
+   cached). Debian's `0.3.0` is what the pinned DMS shell segfaults on.
+4. Builds **DMS** from the pinned commit and installs it to
+   `~/.local/bin/dms`, then installs the helper scripts, the Quickshell
+   voice/reader links and the `swayidle` unit.
+5. Installs **Niri** and **xwayland-satellite** from the bundled `.deb`s.
+6. Deploys the Niri config, the DMS settings (62 keys), the plugin settings and
+   `~/.config/ominty/` (existing user AI config is kept).
+7. Symlinks `ominty`/`ominty-hook` into `~/.local/bin` and generates the Niri
+   bindings fragment from the action registry.
+8. Installs the DMS plugins: six Ominty plugins symlinked from this checkout,
+   and 14 third-party plugins restored at pinned commits from
+   `configs/dms/plugins.lock.json`, then re-applies
+   `ominty-plugins/patches/*`.
+9. Sets up the optional speech stack: the Piper venv + voice, and whisper.cpp
+   with its model.
+10. Verifies and applies the **motion + accent-glow overlay**, then writes the
+    `dms.service` drop-in pointing DMS at the fork.
+11. Writes the `dms.service` user unit and **smoke-tests the shell** when a
+    Niri session is running. On a fresh machine (and when migrating from
+    another desktop) it reports that the test is deferred until the first
+    login.
+12. Validates the action registry and the Niri config.
 
 Existing configuration files are backed up with a
 `.bak-ominty-<timestamp>` suffix before being replaced.
@@ -198,7 +199,8 @@ Third-party DMS plugins are pinned by **exact commit** in
 than taking whatever HEAD happens to be that day. Three operator-managed
 custom builds (`aiOverviewControl`, `dankSoftwareDepot`, `mailReader`) are
 deliberately excluded: they live in a local release workspace and carry the
-author's account configuration.
+author's account configuration. The shipped `settings.json` may still name their
+bar widgets; DMS ignores ids it cannot resolve.
 
 Two things are data rather than code, and are too large for git:
 
@@ -253,12 +255,9 @@ This adds `/etc/apt/sources.list.d/danklinux.list` plus the matching keyring in
 
 > **`dms` is not installed from OBS.** The project there now ships a newer shell
 > generation whose QML layout the overlay patch does not match, so
-> `install.sh` builds the pinned commit instead (see *DMS from source*). It also
-> no longer configures `home:AvengeMedia:dms`, so an `apt upgrade` cannot pull
+> `install.sh` builds the pinned commit instead (see *DMS from source*). It does
+> not configure `home:AvengeMedia:dms` at all, so an `apt upgrade` cannot pull
 > the incompatible package over a working install.
-
-This adds `/etc/apt/sources.list.d/{danklinux,dms}.list` plus the matching
-keyrings in `/etc/apt/keyrings/`.
 
 > **quickshell pinning.** The `danklinux` repo also ships a `quickshell`
 > build, but upstream marks it deprecated for Debian and directs users to
@@ -285,7 +284,7 @@ keyrings in `/etc/apt/keyrings/`.
 ## 4. Post-install checks
 
 ```sh
-ominty registry validate        # 44 action(s), 0 error(s), 0 warning(s)
+ominty registry validate        # all actions valid: 0 errors, 0 warnings
 niri validate -c ~/.config/niri/config.kdl   # config is valid
 systemctl --user is-active dms   # active
 ominty inspect                   # platform, desktop and tts state
@@ -302,8 +301,13 @@ Then exercise the surfaces:
 - `Super+Shift+S` — cheat sheet (GKS)
 - `Super+A` — AI menu
 - `Super+X` — power menu (Restart Audio / Restart Network / Reload Niri)
-- `Ctrl+Alt+S` — read the current selection aloud (TTS layer)
-- `Ctrl+Alt+O` — open the TTS document picker (TTS layer)
+- `Shift+Alt+M` — Ominty Media (one tab per folder under `~/Playlist`)
+- `Ctrl+Shift+A` — Ominty Dictionary
+- `Super+Alt+O` — Ominty Reader (document)
+- `Shift+Alt+S` — Ominty Reader (clipboard)
+- `Super+Alt+T` — Ominty Dictation panel
+- `Ctrl+Alt+R` — Ominty Capture (screen OCR)
+- `Super+S` — Ominty Scripts
 
 ## 5. AI setup (optional)
 
@@ -377,22 +381,27 @@ systemctl --user daemon-reload && systemctl --user restart dms.service
 There is no automated uninstaller yet. To remove:
 
 ```sh
-sudo apt remove --purge niri xwayland-satellite quickshell dms matugen ghostty
+# Packages the installer added (a leftover `dms` package from an older install
+# is optional; the source build lives in ~/.local)
+sudo apt remove --purge niri xwayland-satellite quickshell matugen ghostty
 rm -rf ~/.config/niri ~/.config/DankMaterialShell ~/.config/ominty
-rm -rf ~/.local/share/dms-shell
-rm -f ~/.config/systemd/user/dms.service.d/ominty-shell.conf
-rm -f ~/.local/bin/ominty ~/.local/bin/ominty-hook
+rm -rf ~/.local/share/dms-shell ~/.cache/ominty
+rm -f  ~/.local/bin/ominty ~/.local/bin/ominty-hook \
+       ~/.local/bin/dms ~/.local/bin/quickshell ~/.local/bin/whisper-cli \
+       ~/.local/bin/omi-dict ~/.local/bin/omi-media
+rm -rf ~/.config/systemd/user/dms.service \
+       ~/.config/systemd/user/dms.service.d \
+       ~/.config/systemd/user/swayidle.service
 systemctl --user daemon-reload
 ```
 
-To also drop the APT repositories and keyrings the installer added:
+To also drop the APT repository and keyring, and the optional speech data:
 
 ```sh
 sudo rm -f /etc/apt/sources.list.d/danklinux.list \
-            /etc/apt/sources.list.d/dms.list \
             /etc/apt/keyrings/danklinux.gpg \
-            /etc/apt/keyrings/dms.gpg \
             /etc/apt/preferences.d/ominty-quickshell
+rm -rf ~/.piper-venv ~/.local/share/piper ~/.local/share/ominty/models
 sudo apt update
 ```
 

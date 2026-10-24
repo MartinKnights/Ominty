@@ -371,14 +371,18 @@ even when the stamp matches.
 
 ### `install.sh` exits non-zero
 
-That is deliberate: the shell failed its smoke test. The rest of the install
-completed. Read the log, then:
+A fatal step failed. Read `~/ominty-install-<date>.log` for the last `[ERROR]`
+or the failing command. If the tail is the shell smoke test, the installer
+already fell back to the stock shell or the packaged unit; then:
 
 ```sh
 scripts/smoke-dms.sh
 scripts/diagnose-dms-shell.sh
 scripts/collect-diagnostics.sh
 ```
+
+On a fresh machine the smoke test is **skipped** (no graphical session yet), so
+a non-zero exit there is a build or package failure, not the shell.
 
 ### `sudo` is not available to the agent
 
@@ -415,8 +419,9 @@ A rejected `niri validate` is the usual cause. Restore the backup made by
 
 ### The machine boots into the wrong session
 
-This is the `session.default` choice. Change it at the display manager, or in
-the display manager's configuration; `install.sh` does not force it unless asked.
+This is the `session.default` choice. `install.sh` never changes the default
+session — Niri is selectable at login. To make it the default, change it in your
+display manager's configuration.
 
 ---
 

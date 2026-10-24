@@ -49,6 +49,21 @@ banned_in "Playlist Selector" "${AGENT_DOCS[@]}"
 banned_in "Script Hub" "${AGENT_DOCS[@]}"
 banned_in "Screen OCR" "${AGENT_DOCS[@]}"
 banned_in "Piper TTS" "${AGENT_DOCS[@]}"
+banned_in "/tmp/ominty-install.log" "${AGENT_DOCS[@]}"
+
+section "Flow invariants"
+grep -qE "Niri is not running|Niri session" docs/AGENT-INSTALL.md \
+    && ok "AGENT-INSTALL knows the smoke test needs a Niri session" \
+    || bad "AGENT-INSTALL does not mention the Niri-session requirement"
+grep -qF "after login" docs/AGENT-INSTALL.md \
+    && ok "AGENT-INSTALL verifies after login" \
+    || bad "AGENT-INSTALL does not place verification after login"
+grep -qF "layer.*" AGENTS.md \
+    && ok "AGENTS triage distinguishes layer.* blocking" \
+    || bad "AGENTS triage does not distinguish layer.* blocking"
+grep -qiF "installer flag" docs/AGENT-INSTALL.md \
+    && ok "AGENT-INSTALL states which choices have no flag" \
+    || bad "AGENT-INSTALL implies flags that do not exist"
 
 section "Referenced scripts exist"
 missing_scripts=0

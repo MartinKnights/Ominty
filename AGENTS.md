@@ -14,11 +14,15 @@ implementation contracts; this one governs deployment.
 
 | The machine… | Read |
 | --- | --- |
-| has no desktop, or you are replacing it entirely | [`docs/AGENT-INSTALL.md`](docs/AGENT-INSTALL.md) |
+| has no desktop, or the user wants Ominty as the only desktop | [`docs/AGENT-INSTALL.md`](docs/AGENT-INSTALL.md) |
 | already runs **Ominty** (any version) | [`docs/AGENT-UPGRADE.md`](docs/AGENT-UPGRADE.md) |
-| runs Cinnamon/GNOME and should keep most of it | [`docs/MIGRATION.md`](docs/MIGRATION.md) **first**, then `docs/AGENT-INSTALL.md` |
+| runs Cinnamon/GNOME and the user wants to keep apps, settings or data | [`docs/MIGRATION.md`](docs/MIGRATION.md) **first**, then `docs/AGENT-INSTALL.md` |
 | has a broken Ominty desktop | [`docs/TROUBLESHOOTING.md`](docs/TROUBLESHOOTING.md) — do not reinstall |
-| is a different distribution | stop and report; only Debian 13 and its derivatives are supported |
+| is not Debian 13, LMDE 7 or Ubuntu 24.04-family | stop and report |
+
+A stock LMDE 7 install arrives with Cinnamon. That alone does not make it a
+"migration": ask the user whether they want to keep anything from the existing
+session. If not, treat it as a fresh install.
 
 The upgrade runbook produces a **friction report**; the install runbook produces
 a **setup report**. Both are required deliverables, not optional extras.
@@ -40,8 +44,10 @@ An opinionated Wayland desktop for Debian-family systems:
 
 DMS is source-built on **both** Debian and Ubuntu families so every machine runs
 the identical shell. The installer builds Quickshell first, builds DMS, installs
-its user unit, and **smoke-tests the shell**: if it crash-loops it disables the
-overlay, then falls back to the packaged unit, and exits non-zero.
+its user unit, and — **when a Niri session is already running** — smoke-tests the
+shell: if it crash-loops it disables the overlay, then falls back to the packaged
+unit, and exits non-zero. On a fresh machine there is no session yet, so the test
+is deferred until after the first login.
 
 ### Supported platforms
 
@@ -80,7 +86,7 @@ overlay, then falls back to the packaged unit, and exits non-zero.
 ## 4. The assessment
 
 ```sh
-ominty-core/cli/ominty inspect --json > /tmp/ominty-inspect.json
+ominty-core/cli/ominty inspect --json > /tmp/ominty-inspect.json || true
 ominty-core/cli/ominty inspect                 # the same report for a human
 ```
 
@@ -97,15 +103,20 @@ ominty-core/cli/ominty inspect                 # the same report for a human
 
 Full field reference: [`docs/INSPECT.md`](docs/INSPECT.md).
 
-**Triage:**
+**Triage — by finding id, not by the word "blocking" alone:**
 
-- `summary.blocking` non-empty → **stop** and report each entry.
-- `summary.ready: true` → the machine can be installed on; outstanding choices
-  are not blockers.
-- A `fail` finding is only a stop signal when its `severity` is `blocking`.
+| Blocking finding | Meaning | Action |
+| --- | --- | --- |
+| `platform.*`, `hardware.*` | unsupported machine | **stop** |
+| `config.*` | a previous install is broken (e.g. a dead symlink) | **stop** |
+| `layer.*` | packages are missing | **expected before an install** — the installer adds them; continue |
+| anything else | unknown | stop and report |
 
-Note: `inspect` exits `1` when there is a blocking finding. That is data, not a
-crash — `--json` still writes a complete document.
+`summary.ready` means "fully provisioned", so it is `false` before a fresh
+install and that is normal. Outstanding `choices` are never blockers.
+
+`inspect` exits `1` whenever something is blocking. That is data, not a crash —
+`--json` still writes a complete document.
 
 ---
 
@@ -117,26 +128,33 @@ answer.
 
 | Choice | Why it cannot be defaulted |
 | --- | --- |
-| `llm.provider` | Writes `~/.config/ominty/ai.toml`; may download a model. `none` is always valid. |
+| `llm.provider` | Points AI actions at a provider. The installer only writes the template; nothing is downloaded by it. `none` means "leave AI unconfigured". |
 | `session.default` | Changes what the machine boots into; easy to lock the user out. Confirm a fallback session stays selectable. |
 | `config.migration` | Replacing an existing configuration is destructive. |
+
+**Only the layer choices are installer flags.** `llm.provider`,
+`session.default` and `config.migration` have no flag: each is applied by
+editing a user file, by leaving the display manager alone, or by stopping and
+doing the migration assessment. The exact mapping is in
+[`docs/AGENT-INSTALL.md`](docs/AGENT-INSTALL.md) Phase 4 — follow that table
+rather than guessing.
 
 Optional choices (`layers`, `plugins.dms`, `desktop.shell_overlay`,
 `tts.enabled`) may be inferred from the machine, but confirm before acting.
 
-Pass the answers through as installer flags (for example `--layers "desktop
-tts"`), never by editing the repository.
+Never edit the repository to record an answer.
 
 ---
 
 ## 6. Plan, then apply
 
 ```sh
-./install.sh --dry-run --layers "desktop tts terminal editor cli containers browser"
+./install.sh --dry-run --layers "<chosen>"
 ```
 
-`--dry-run` executes nothing; it prints every command prefixed `[DRY ]`. Show it
-to the user and wait for a go-ahead, then:
+`--dry-run` executes nothing; it prints every command prefixed `[DRY ]`. Backup
+steps appear as `[DRY ] cp -a …` — the plan names the backup it *would* make.
+Show it to the user and wait for a go-ahead, then:
 
 ```sh
 ./install.sh 2>&1 | tee ~/ominty-install-$(date +%F).log
@@ -165,7 +183,10 @@ memory.
 
 ## 7. Verify
 
-The canonical suite. Every deployment ends with these:
+The canonical suite. Run it **inside the first Niri session**: `smoke-dms.sh`
+and the two verifiers need `graphical-session.target`, so they cannot pass
+before the user logs in. The installer skips the smoke test in that case rather
+than failing.
 
 | Check | Command | Pass |
 | --- | --- | --- |
@@ -191,11 +212,13 @@ glow, the spring animation, and the six Ominty keys after logging in.
 
 Stop and give the user **problem, evidence, impact, options** when:
 
-- `summary.blocking` is non-empty, or the distro/codename is unsupported;
+- a blocking finding other than `layer.*` is present, or the distro/codename is
+  unsupported;
 - the architecture is not `x86_64`;
 - `sudo` is unavailable and a privileged step is required;
 - `registry validate` or `niri validate` reports errors;
-- the installer exits non-zero (it does so deliberately when the shell cannot run);
+- the installer exits non-zero (a fatal step failed, or — only under a running
+  Niri session — the shell failed its smoke test);
 - a plugin patch no longer applies after an upstream update;
 - a change would destroy user configuration without a backup.
 
