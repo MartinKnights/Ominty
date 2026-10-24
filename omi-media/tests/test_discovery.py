@@ -38,15 +38,40 @@ def test_discover_playlists_missing_directory_returns_empty(tmp_path):
     assert discover_playlists(str(tmp_path / "does-not-exist")) == []
 
 
-def test_discover_categories_order_and_counts(tmp_path):
-    video = _make_playlists(tmp_path, ["A Course.m3u", "B Course.m3u"])
-    empty = tmp_path / "empty"
-    empty.mkdir()
-    cats = {
-        "video": {"id": "video", "name": "Video", "directory": str(video), "player": "vlc", "player_args": []},
-        "music": {"id": "music", "name": "Music", "directory": str(empty), "player": "mpv", "player_args": []},
+def _mk(root: Path, name: str, playlists: list[str]) -> Path:
+    d = root / name
+    d.mkdir(parents=True, exist_ok=True)
+    for n in playlists:
+        (d / n).write_text("#EXTM3U\n", encoding="utf-8")
+    return d
+
+
+def test_discover_categories_scans_folders_and_hides_empty(tmp_path):
+    _mk(tmp_path, "Video", ["B.m3u", "A.m3u"])
+    _mk(tmp_path, "Music", ["Gospel.m3u"])
+    _mk(tmp_path, "Courses", [])            # empty -> hidden
+    (tmp_path / ".hidden").mkdir()
+    (tmp_path / ".hidden" / "x.m3u").write_text("", encoding="utf-8")
+    (tmp_path / "loose.m3u").write_text("", encoding="utf-8")  # file, not a folder
+
+    cats = discover_categories(str(tmp_path))
+    assert [c["name"] for c in cats] == ["Music", "Video"]   # alphabetical
+    assert [c["playlist_count"] for c in cats] == [1, 2]
+    assert all(c["player"] == "vlc" for c in cats)
+
+
+def test_discover_categories_missing_root_is_empty(tmp_path):
+    assert discover_categories(str(tmp_path / "nope")) == []
+
+
+def test_discover_categories_applies_overrides_by_name_and_directory(tmp_path):
+    _mk(tmp_path, "Music", ["Gospel.m3u"])
+    _mk(tmp_path, "Video", ["Film.m3u"])
+    overrides = {
+        "music": {"name": "Music", "player": "mpv", "player_args": ["--no-video"]},
+        "films": {"directory": str(tmp_path / "Video"), "player": "vlc"},
     }
-    result = discover_categories(cats)
-    assert [c["id"] for c in result] == ["video", "music"]
-    assert result[0]["playlist_count"] == 2
-    assert result[1]["playlist_count"] == 0
+    cats = {c["id"]: c for c in discover_categories(str(tmp_path), overrides)}
+    assert cats["music"]["player"] == "mpv"
+    assert cats["music"]["player_args"] == ["--no-video"]
+    assert cats["video"]["player"] == "vlc"

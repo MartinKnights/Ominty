@@ -1,22 +1,25 @@
 """XDG paths and optional configuration (Omi Media Launcher spec §4–§6).
 
-    config  ~/.config/omi/media.toml   (optional — categories + players)
+    config  ~/.config/omi/media.toml   (optional — root + per-folder overrides)
     state   ~/.local/state/omi/media/  (reserved for Phase 2 progress logs)
 
 Shape:
 
     [general]
-    root = "/home/martin/Playlist"
+    root = "~/Playlist"
 
-    [categories.video]
-    name = "Video"
-    directory = "/home/martin/Playlist/Video"
+    [categories.Music]          # key matching the folder name
+    player = "mpv"
+    player_args = ["--no-video"]
+
+    [categories.Films]          # or match by path
+    directory = "{root}/Video"
     player = "vlc"
-    player_args = []
 
-Priorities: a user config file overlays the built-in defaults, so the
-tool works out of the box with the standard four folders.  `OMI_MEDIA_ROOT`
-overrides the default root (handy for tests and new installs).
+The category list is **not** configured: it is the set of subfolders under the
+root that contain a playlist (see ``discovery.discover_categories``). This file
+only overrides how a folder is presented and played. Entries for folders that
+do not exist are ignored, which makes renaming a folder a complete migration.
 """
 
 from __future__ import annotations
@@ -43,14 +46,9 @@ def state_dir() -> Path:
 
 DEFAULT_ROOT = os.environ.get("OMI_MEDIA_ROOT") or str(Path.home() / "Playlist")
 
-DEFAULT_CATEGORIES = {
-    # VLC for every category: it always opens a real player window and speaks
-    # art, so audio/music always request the controller window explicitly.
-    "audio": {"name": "Audio", "directory": "{root}/Audio", "player": "vlc", "player_args": []},
-    "courses": {"name": "Courses", "directory": "{root}/Courses", "player": "vlc", "player_args": []},
-    "music": {"name": "Music", "directory": "{root}/Music", "player": "vlc", "player_args": []},
-    "video": {"name": "Video", "directory": "{root}/Video", "player": "vlc", "player_args": []},
-}
+#: Created by install.sh as a starting point. They are ordinary folders: rename
+#: or delete them and the launcher follows.
+STARTER_FOLDERS = ("Audio", "Courses", "Music", "Video")
 
 
 def load_config(path: Path | None = None) -> dict:
@@ -79,32 +77,25 @@ def effective_root(cfg: dict) -> str:
     return str(cfg.get("general", {}).get("root") or DEFAULT_ROOT)
 
 
-def categories(cfg: dict) -> dict[str, dict]:
-    """Resolved categories: built-in defaults merged with the user config.
+def folder_overrides(cfg: dict) -> dict[str, dict]:
+    """Per-folder overrides from media.toml, keyed by config key.
 
-    Merging is **per key**: a user override that sets only e.g. ``player``
-    keeps the default ``player_args`` (so mpv's forcing flags survive a
-    partial override).  Any ``directory`` value containing ``{root}`` has the
-    effective root interpolated.
+    Only ``name``, ``player`` and ``player_args`` are meaningful. ``directory``
+    is kept so discovery can match an override to a folder by path; entries for
+    folders that do not exist are ignored there, not here.
     """
     root = effective_root(cfg)
-    merged = {**DEFAULT_CATEGORIES, **cfg.get("categories", {})}
-    result: dict[str, dict] = {}
-    for cid, spec in merged.items():
-        item = dict(DEFAULT_CATEGORIES.get(cid, {}))
-        item.update(spec)
-        item.setdefault("name", cid.capitalize())
+    out: dict[str, dict] = {}
+    for key, spec in (cfg.get("categories") or {}).items():
+        item = dict(spec)
+        item.setdefault("name", str(key))
         item.setdefault("player", "vlc")
         item.setdefault("player_args", [])
-        item["name"] = str(item["name"])
-        # Directory falls back to {root}/<Name> so an override that omits
-        # `directory` still lands on the same folder the defaults use.
-        item.setdefault("directory", f"{root}/{item['name']}")
-        item["directory"] = str(item["directory"]).replace("{root}", root)
-        item["player"] = str(item["player"])
+        for field in ("name", "directory"):
+            if field in item:
+                item[field] = str(item[field]).replace("{root}", root)
         if not isinstance(item["player_args"], list):
             item["player_args"] = []
         item["player_args"] = [str(a) for a in item["player_args"]]
-        item["id"] = cid
-        result[cid] = item
-    return result
+        out[str(key)] = item
+    return out

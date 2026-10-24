@@ -56,7 +56,12 @@ def test_categories_json(tmp_path):
     assert by_id["video"]["playlist_count"] == 2
     assert by_id["music"]["playlist_count"] == 1
     assert by_id["audio"]["playlist_count"] == 1
-    assert by_id["courses"]["playlist_count"] == 0
+    # Empty folders are hidden until they contain a playlist.
+    assert "courses" not in by_id
+    assert [c["id"] for c in data["categories"]] == ["audio", "music", "video"]
+    # media.toml still overrides the player for a folder that exists.
+    assert by_id["music"]["player"] == "mpv"
+    assert by_id["video"]["player"] == "vlc"
 
 
 def test_playlists_json(tmp_path):

@@ -24,11 +24,21 @@ def _out(obj: dict, use_json: bool) -> int:
     return 0
 
 
-def cmd_categories(args: argparse.Namespace) -> int:
-    """List configured categories with live playlist counts (spec §9)."""
+def _categories(args: argparse.Namespace) -> list[dict]:
+    """Folders under the root that contain playlists, with overrides applied."""
     from .discovery import discover_categories
 
-    items = discover_categories(cfg.categories(cfg.load_config(args.config)))
+    data = cfg.load_config(args.config)
+    return discover_categories(cfg.effective_root(data), cfg.folder_overrides(data))
+
+
+def _category(args: argparse.Namespace, cid: str) -> dict | None:
+    return next((c for c in _categories(args) if c["id"] == cid), None)
+
+
+def cmd_categories(args: argparse.Namespace) -> int:
+    """List discovered categories with live playlist counts (spec §9)."""
+    items = _categories(args)
     if args.json:
         return _out({"categories": items}, True)
     if not items:
@@ -43,7 +53,7 @@ def cmd_playlists(args: argparse.Namespace) -> int:
     """List the playlists in one category (spec §10)."""
     from .discovery import discover_playlists
 
-    spec = cfg.categories(cfg.load_config(args.config)).get(args.category)
+    spec = _category(args, args.category)
     if not spec:
         print(f"omi-media: unknown category '{args.category}'", file=sys.stderr)
         return 1
@@ -68,7 +78,7 @@ def cmd_play(args: argparse.Namespace) -> int:
     """Hand a playlist to its category's player (spec §11)."""
     from .discovery import discover_playlists
 
-    spec = cfg.categories(cfg.load_config(args.config)).get(args.category)
+    spec = _category(args, args.category)
     if not spec:
         print(f"omi-media: unknown category '{args.category}'", file=sys.stderr)
         return 1
