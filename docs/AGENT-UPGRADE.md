@@ -280,7 +280,7 @@ plus the checks a machine cannot make. Expected values are in the Appendix.
 | 12 | TTS runtime | `ominty tts status` | a status line, not a traceback |
 | 13 | Parity | `./scripts/verify-parity.py` | exit 0 — no missing action requirements or plugins |
 | 14 | Dictionary | `omi-dict dictionaries` | at least one dictionary listed |
-| 15 | Playlist manager | `omi-media categories` | the four categories, no traceback |
+| 15 | Playlist manager | `omi-media categories` | one tab per non-empty folder under `~/Playlist`, no traceback |
 
 Save the post-upgrade JSON:
 
@@ -365,6 +365,7 @@ produces a report, and that report is the most valuable kind.
 | `dms.service` fails to start | `journalctl --user -u dms.service -n 80 --no-pager`; capture; try `systemctl --user restart`. |
 | Shell starts then dies (crash loop) | `scripts/smoke-dms.sh` will report the restart count and the newest Quickshell crash report. Capture `~/ominty-dms-matrix-*.md` from `scripts/diagnose-dms-shell.sh`, then `scripts/rollback-dms.sh --overlay-off`. |
 | A DMS plugin opens blank | Ask the plugin: `dms ipc call <id> viewStatus` — it reports the QML load error. Check `scripts/apply-plugin-patches.sh --check`, apply, then `dms ipc call plugins reload <id>`. Blank is usually a load failure, not missing data. |
+| `dms plugins update` was run and a plugin regressed | It resets plugins to upstream and discards `ominty-plugins/patches/*`. Run `scripts/apply-plugin-patches.sh`, then `dms ipc call plugins reload <id>`. |
 | Bar renders but nothing responds | Stale QML cache: `scripts/rollback-dms.sh --overlay-off` restarts with an isolated cache. Do not hand-delete `~/.cache/quickshell` on a build that is still in use. |
 | Piper/TTS disabled | Allowed (optional layer). Record the warning verbatim. |
 | Matrix produced nothing / no session env | Run `scripts/collect-diagnostics.sh` and send the tarball — it gathers packages, units, journals, crashes, config, plugins and the tool stack without needing a working matrix. |

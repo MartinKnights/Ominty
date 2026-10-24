@@ -7,18 +7,29 @@ environment and preserves whatever is not deliberately replaced.
 
 ## Requirements
 
-- **Debian 13 (Trixie)** or **LMDE 7** (the reference platform). Other
-  Debian-based distros may work but are untested.
+- **Debian 13 (Trixie)** or **LMDE 7 (gigi)** — the validated target.
+  Ubuntu 24.04-family is supported through the source build
+  ([UBUNTU.md](UBUNTU.md)); Debian 12 / LMDE 6 is refused because it has no
+  `trixie-backports`.
+- **x86_64**.
 - A user account with **sudo** access.
 - **curl** and **gpg** — used to import the third-party signing keys.
-- ~2 GB free disk space (Niri + DMS + dependencies).
-- An internet connection (the installer fetches APT keys from
-  `download.opensuse.org`).
+- **~10 GB free** under your home directory: Quickshell and DMS are built from
+  source, plus a ~142 MB speech model on first install.
+- An internet connection (APT keys from `download.opensuse.org`; source pins
+  from GitHub and HuggingFace).
+
+## Or let an agent do it
+
+`install.sh` is the same whether a human or an AI runs it. If you would rather
+have an agent drive — assessment, questions, plan, install, verification — give
+it the prompt in [PROMPTS.md](PROMPTS.md) and it will follow
+[../AGENTS.md](../AGENTS.md) and [AGENT-INSTALL.md](AGENT-INSTALL.md).
 
 ## 1. Clone
 
 ```sh
-git clone --recurse-submodules https://github.com/<you>/Ominty.git
+git clone --recurse-submodules https://github.com/MartinKnights/Ominty.git
 cd Ominty
 ```
 
@@ -167,6 +178,11 @@ Every subfolder is a tab: rename them, add your own, or prefix them (`01-Audio`)
 to control the order. A folder with no playlist is hidden until it contains
 one. Drop `*.m3u`/`*.m3u8`/`*.pls` files in; there is no database to import.
 `media.toml` only overrides the player for a folder.
+
+The launcher is keyboard-driven: `Tab` cycles tabs → filter → list, arrows move,
+`Enter` plays, typing filters. If a generated playlist plays `Track 10` before
+`Track 2`, the `.m3u` is alphabetical — rewrite it with
+`omi-media sort --in-place <playlist>` (a backup is kept).
 
 If a generated playlist plays `Track 10` before `Track 2`, the `.m3u` itself is
 in alphabetical order (the format has no track field). Rewrite it in natural
@@ -332,6 +348,13 @@ git -C Ominty submodule update --init --recursive
   (and skips the build when it did not),
 - re-applies the shell overlay against the freshly built tree,
 - redeploys the helper scripts and refreshes the Quickshell voice/TTS links.
+
+`install.sh` re-applies the plugin patches and rebuilds only what the pins
+changed. Verify with `scripts/verify-upgrade.sh` (plumbing),
+`scripts/verify-parity.py` (function) and `scripts/smoke-dms.sh` (liveness).
+
+For an agent-driven update, follow [AGENT-UPGRADE.md](AGENT-UPGRADE.md) instead;
+it has the gates and the friction report.
 
 If you want to check the overlay on its own:
 

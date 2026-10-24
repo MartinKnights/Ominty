@@ -19,6 +19,11 @@ each, so the shell overlay, motion and glow behave identically (see
 
 ---
 
+> **Where this fits:** this document is the *assessment* step for a machine that
+> already runs a desktop. Complete it before installing, then follow
+> [AGENT-INSTALL.md](AGENT-INSTALL.md) (agent) or [INSTALL.md](INSTALL.md)
+> (human).
+
 ## 1. Niri does not run XDG autostart
 
 Cinnamon starts `~/.config/autostart/*.desktop` at login. **Niri does not read
@@ -148,12 +153,13 @@ machine:
 
 | Cinnamon name | Chord | Command |
 | --- | --- | --- |
-| Script Command Centre | `Super+S` | `~/Scripts/script_command_centre.sh` |
-| Read Selection | `Ctrl+Alt+S` | `~/bin/read-selection` |
-| Artha Dictionary | `Ctrl+Alt+A` | `~/bin/artha-word` (wrapper: bridges the selection to X11 for Artha) |
-| Screen OCR | `Ctrl+Alt+R` | `~/.local/bin/screen-ocr` |
-| Read document aloud | `Ctrl+Alt+O` | `~/bin/tts-pick` (TTS layer) |
-| Read document aloud | `Mod+Alt+O` | `~/bin/tts-pick` (TTS layer) |
+| Ominty Scripts | `Super+S` | `~/Scripts/script_command_centre.sh` |
+| Ominty Reader (selection) | `Ctrl+Alt+S` | `~/bin/read-selection` |
+| Artha Dictionary | `Ctrl+Alt+A` | `~/bin/artha-word` (bridges the selection to X11 for Artha) |
+| Ominty Capture | `Ctrl+Alt+R` | `~/.local/bin/screen-ocr` |
+| Ominty Reader (document) | `Super+Alt+O` | `~/bin/tts-pick` (TTS layer) |
+| Ominty Reader (clipboard) | `Shift+Alt+S` | `~/bin/read-selection --clipboard` |
+| Ominty Media | `Shift+Alt+M` | the playlist launcher (DMS plugin) |
 
 ```kdl
 binds {
@@ -161,10 +167,12 @@ binds {
     Ctrl+Alt+S  { spawn "__HOME__/bin/read-selection"; }
     Ctrl+Alt+A  { spawn "__HOME__/bin/artha-word"; }
     Ctrl+Alt+R  { spawn "__HOME__/.local/bin/screen-ocr"; }
-    Ctrl+Alt+O  { spawn "__HOME__/bin/tts-pick"; }
-    Mod+Alt+O   { spawn "__HOME__/bin/tts-pick"; }
+    Ctrl+Alt+O  { spawn "__HOME__/bin/tts-pick"; }   // alias; Super+Alt+O is the registry action
 }
 ```
+
+`Shift+Alt+M`, `Super+Alt+O`, `Shift+Alt+S`, `Ctrl+Shift+A` and `Super+Alt+T`
+come from the action registry (see `~/.config/ominty/generated/niri/bindings.kdl`).
 
 (`install.sh` renders `__HOME__` when it deploys the file.)
 

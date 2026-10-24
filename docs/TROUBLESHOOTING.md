@@ -1,150 +1,432 @@
 # Troubleshooting
 
-## Installer
+Symptom → check → fix. Every entry assumes you can open a terminal in the Niri
+session; if the desktop will not start at all, use a TTY (`Ctrl+Alt+F3`) and
+log in there.
 
-### `apt-get install` fails on `dms` / `matugen` / `ghostty`
+## Start here
 
-`dms`, `matugen`, and `ghostty` are **not packaged in Debian** — they come from
-AvengeMedia's Open Build Service (OBS). The installer automatically adds two
-repositories and their signing keys:
-
-| OBS project | Provides |
-|---|---|
-| `home:AvengeMedia:danklinux` | `matugen`, `ghostty`, `danksearch`, `dgop`, `niri` (optional) |
-| `home:AvengeMedia:dms` | `dms` (the shell itself) |
-
-If keys are rejected or the network is blocked, see the Requirements section in
-[INSTALL.md](INSTALL.md).
-
-### `apt-get install` picks the wrong `quickshell` (deprecated OBS build)
-
-The `danklinux` repo also ships a `quickshell` build. Its version number
-(`0.3.1.db2`) sorts higher than Debian's (`0.3.0-1~bpo13+1`) and would
-therefore be preferred by APT. The installer pins `quickshell` to
-`trixie-backports` via `/etc/apt/preferences.d/ominty-quickshell`.
-
-If you have modified this pin, you can restore it:
+Collect evidence before changing anything:
 
 ```sh
-printf 'Package: quickshell\nPin: release n=trixie-backports\nPin-Priority: 1001\n' \
-  | sudo tee /etc/apt/preferences.d/ominty-quickshell >/dev/null
-sudo apt update && sudo apt install -t trixie-backports --reinstall quickshell
+scripts/collect-diagnostics.sh          # read-only; writes diagnostics-<host>-<date>/
+scripts/smoke-dms.sh                    # is the shell alive and answering?
+scripts/verify-upgrade.sh               # plumbing: unit, overlay, helpers
+scripts/verify-parity.py                # function: actions, plugins, stacks
 ```
 
-### `niri validate` reports errors after install
+The diagnostics folder contains `SUMMARY.txt` plus system, packages, repo,
+systemd, runtime, crash, config, plugin and tool reports. It is safe to send as
+is; it contains no passwords.
 
-The config includes `dms/*.kdl` fragments and the Ominty-generated
-`bindings.kdl`. If a fragment is missing, the include is `optional=true`
-and Niri still starts. Re-run `./install.sh` to regenerate, or check:
+Where the logs are:
+
+| What | Where |
+| --- | --- |
+| Shell unit | `journalctl --user -u dms.service -n 200` |
+| Quickshell crashes | `~/.cache/quickshell/crashes/<id>/report.txt` |
+| Reader player | `$XDG_RUNTIME_DIR/ominty-tts/player.log` |
+| Piper daemon | `/tmp/piper_daemon.log` |
+| Installer | `~/ominty-install-<date>.log` |
+| Diagnostics | `diagnostics-<host>-<date>/SUMMARY.txt` |
+
+---
+
+## The shell (DMS)
+
+### No bar at all
+
+**Check**
 
 ```sh
-ls ~/.config/niri/dms/
-ls ~/.config/ominty/generated/niri/bindings.kdl
+systemctl --user status dms.service --no-pager
+systemctl --user cat dms.service | grep ExecStart
 ```
 
-### `ominty` command not found
+**Fix**
 
-`~/.local/bin` must be on your `PATH`. Add to `~/.bashrc` / `~/.zshrc`:
+- `ExecStart=.../.local/bin/dms` → the pinned build is in use. Read the journal.
+- `ExecStart=/usr/bin/dms` → the installer fell back to the packaged shell.
+  Re-run `./install.sh`; if it fails again, run
+  `scripts/diagnose-dms-shell.sh` and keep `~/ominty-dms-matrix-*.md`.
+- Unit not found → `./install.sh` again (it writes the user unit).
+
+### The bar appears, then disappears (crash loop)
+
+**Check**
 
 ```sh
-export PATH="$HOME/.local/bin:$PATH"
+scripts/smoke-dms.sh
 ```
 
-## Runtime
+It reports `NRestarts`, the state, the newest Quickshell crash report and the
+journal tail.
 
-### DMS bar doesn't appear
+**Fix**
 
 ```sh
-systemctl --user is-active dms
-journalctl --user -u dms -n 50
+scripts/rollback-dms.sh --overlay-off     # same build, stock shell
 ```
 
-If DMS isn't running, start it: `dms` (or check the Niri session autostart).
-
-### `Super+K` does nothing
-
-1. Check the Ominty fragment is included:
-   ```sh
-   tail -3 ~/.config/niri/config.kdl
-   ```
-   It must end with the `include ... bindings.kdl` line.
-2. Regenerate: `ominty registry build`
-3. Reload Niri: `Super+X` → **Reload Niri**, or `niri msg action reload-config`.
-
-### `Super+Space` shows apps but no Ominty actions
-
-The `omintyActions` plugin must be enabled:
+If it still loops, the build itself is incompatible with this Quickshell:
 
 ```sh
-ls ~/.config/DankMaterialShell/plugins/omintyActions
+scripts/rollback-dms.sh --to-packaged     # packaged /usr/bin/dms
+scripts/diagnose-dms-shell.sh             # which combination works
 ```
 
-and `plugin_settings.json` must have `"omintyActions": { "enabled": true }`.
-Re-run `./install.sh` to restore.
+Do not hand-edit `~/.local/share/dms-shell`; it is regenerated.
 
-### Wallpaper carousel is empty
+### The bar renders but nothing responds
 
-The carousel reads `~/Wallpapers`. Create it and add images:
+Usually a stale QML cache. Since the per-build cache change this only affects
+the packaged fallback.
+
+**Fix** (safe: stop, move, start)
 
 ```sh
-mkdir -p ~/Wallpapers
+systemctl --user stop dms.service
+mv ~/.cache/quickshell/qmlcache "$HOME/.cache/quickshell/qmlcache.bak-$(date +%s)" 2>/dev/null
+systemctl --user start dms.service
 ```
 
-### Audio restart button fails
+For the pinned build the cache is `~/.cache/ominty/dms-<rev>/quickshell`.
 
-`system.audio.restart` uses the `service.restart` adapter (systemd user
-scope). Check:
+### The theme or glow is missing
 
 ```sh
-systemctl --user is-active pipewire wireplumber
+cat ~/.local/share/dms-shell/.ominty-overlay.json
+systemctl --user show dms.service -p Environment | tr ' ' '\n' | grep DMS_SHELL_DIR
 ```
 
-### Network restart drops the connection
+The marker's `base` must be `c27a2bbcb6e09e50`. If `DMS_SHELL_DIR` is unset, the
+drop-in is missing: re-run `./install.sh`, or apply the overlay by hand:
 
-`system.network.restart` runs `nmcli networking off/on`. This briefly
-disconnects networking — don't run it over a remote session.
+```sh
+configs/dms/shell-overlay/apply.sh --check   # 0 = applicable
+configs/dms/shell-overlay/apply.sh
+systemctl --user daemon-reload && systemctl --user restart dms.service
+```
 
-## AI
+Exit `1` means the patch no longer matches the build — the stock shell keeps
+running. Report it; do not force it.
 
-### `Super+A` → Ask AI errors
+---
 
-- Check the provider: `ominty ai provider status`
-- If using Ollama: is it running? `ollama list`
-- Is the model pulled? `ollama pull qwen2.5:3b`
-- Check `~/.config/ominty/ai.toml` for the provider/model configuration.
+## DMS plugins
 
-### AI actions are refused
+### A plugin opens blank
 
-AI actions respect the registry policy (`ai_accessible`, `risk`,
-`confirmation`). Some actions require `--confirmed` or are not AI-accessible
-by design. This is intentional — see `docs/ARCHITECTURE.md`.
+Blank almost always means a QML load failure, not missing data.
+
+**Check**
+
+```sh
+dms ipc call <pluginId> viewStatus     # e.g. dankChat, omintyMedia
+dms ipc call plugins reload <pluginId>
+journalctl --user -b --no-pager | grep -iE "is not a type|Non-existent attached"
+```
+
+**Fix**
+
+```sh
+scripts/apply-plugin-patches.sh --check   # exit 1 = a patch is missing
+scripts/apply-plugin-patches.sh
+dms ipc call plugins reload <pluginId>
+```
+
+The known case is DankChat 0.6.0, which uses a Qt attached object removed in 6.8
+and renders an empty window without the patch.
+
+### A plugin disappeared after an update
+
+`dms plugins update` and `dms plugins restore` reset managed plugins to
+upstream, discarding local patches — and `restore` only installs what the
+lockfile lists.
+
+**Fix**
+
+```sh
+cat ~/.config/DankMaterialShell/plugins.lock.json
+dms plugins restore ~/.config/DankMaterialShell/plugins.lock.json
+scripts/apply-plugin-patches.sh
+dms ipc call plugins reload <pluginId>
+```
+
+The Ominty plugins (`omintyMedia`, `omintyDictionary`, `omintyDownload`,
+`omintyOllama`, `omintyActions`, `omintyKeybinds`) are symlinks into this
+repository; `./install.sh` re-creates them.
+
+### Plugin settings are empty
+
+`~/.config/DankMaterialShell/plugin_settings.json` is deployed by the
+installer. Re-run `./install.sh`; the previous file is kept as
+`.bak-ominty-<timestamp>`.
+
+---
+
+## Ominty Media
+
+### "No folders with playlists — add .m3u files under ~/Playlist"
+
+A folder is a tab only when it contains a playlist; empty folders are hidden.
+
+```sh
+ls ~/Playlist
+omi-media categories
+```
+
+Put a `.m3u`, `.m3u8` or `.pls` in any folder under `~/Playlist` and reopen the
+launcher (`Shift+Alt+M`). Add folders at will; they become tabs automatically.
+
+### A playlist will not play
+
+```sh
+omi-media play <category> "<playlist>" --dry-run
+```
+
+That prints the exact player command. If the player is missing, install it or
+point the folder at another one in `~/.config/omi/media.toml`:
+
+```toml
+[categories.Music]
+player = "mpv"
+player_args = ["--no-video"]
+```
+
+### Tracks play in the wrong order
+
+The `.m3u` order *is* the playback order; the format has no track field. A
+generated playlist is usually lexicographic (`Track 10` before `Track 2`):
+
+```sh
+omi-media sort --in-place "<playlist>"      # keeps a backup
+omi-media sort --in-place --dry-run "<playlist>"
+```
+
+VLC has no persistent "sort by title" setting, so this is the only fix.
+
+---
+
+## Ominty Reader (text to speech)
+
+### Picking a document does nothing
+
+It now shows a dialog with the reason. The same reason is in
+`$XDG_RUNTIME_DIR/ominty-tts/player.log`.
+
+```sh
+ominty tts say /path/to/file --json
+ominty tts status
+```
+
+**Fix**
+
+- `pandoc not found` / `pdftotext not found` / `catdoc not found` → the `tts`
+  layer did not install: `./install.sh --layers "desktop tts"`.
+- `TTS player exited immediately` → read `player.log`; usually a missing
+  GStreamer plugin (`gstreamer1.0-plugins-good`).
+- `piper not found in venv` → `scripts/tts/setup-piper.sh`.
+
+### The panel does not appear
+
+The panel is a Quickshell surface (`ominty-tts`), started at login.
+
+```sh
+ls -l ~/.config/quickshell/ominty-tts
+pgrep -af "quickshell -c ominty-tts"
+```
+
+Re-create the link with `./install.sh`; log out and back in for the startup
+entry.
+
+### No sound
+
+```sh
+~/.piper-venv/bin/piper --help >/dev/null && echo piper-ok
+ls ~/.local/share/piper/voices/*.onnx
+wpctl status | head -20
+```
+
+Install a voice with `scripts/tts/setup-piper.sh` and check the default sink.
+
+### Clipboard reading does nothing
+
+`Shift+Alt+S` speaks the clipboard. It needs `wl-clipboard` and the Piper
+daemon; check `/tmp/piper_daemon.log` and copy something first.
+
+---
+
+## Ominty Dictionary
+
+### "Dictionary unavailable"
+
+No dictionaries are imported (they are ~800 MB and not in git).
+
+```sh
+omi-dict dictionaries
+```
+
+**Fix**
+
+```sh
+scripts/omi-dict-import.sh ~/Documents/Dictionaries
+```
+
+The script maps the common filenames to the ids the config expects (`oed`,
+`etymology`, `roget`, `wordfamilies`).
+
+### Wrong dictionary or no results
+
+```sh
+cat ~/.config/omi/dictionary.toml    # default_dictionary = "oed"
+omi-dict dictionaries
+```
+
+Set `default_dictionary` to an id that exists, or import the missing one.
+
+---
+
+## Ominty Dictation (speech to text)
+
+### The panel opens but nothing is typed
+
+```sh
+ominty voice status
+ominty action run voice.dictate --json
+```
+
+**Fix**
+
+| Missing | Fix |
+| --- | --- |
+| `whisper-cli` | `scripts/source/whisper-build.sh` |
+| model file | same script; it downloads `ggml-base.en.bin` |
+| `pw-record` | install `pipewire-bin` |
+| `wtype` | install `wtype` (desktop layer) |
+
+`Super+Alt+D` toggles dictation; `Super+Alt+T` shows the panel. There is no
+key-release event under Niri, so it is a toggle by design.
+
+### Dictation never stops
+
+`ominty voice dictate` again, or `ominty voice panel` and use the stop button.
+`ominty voice status` shows whether a recording is active.
+
+---
+
+## Ominty Capture (screen OCR)
+
+### OCR returns nothing
+
+```sh
+tesseract --version
+grim -g "$(slurp)" - | tesseract stdin stdout
+```
+
+If the manual pipeline works, the keybinding is fine and the selection was
+empty. If `tesseract` is missing, install the desktop layer
+(`./install.sh --layers desktop`). The result is shown as a notification and
+copied to the clipboard with `wl-copy`.
+
+---
+
+## Installer and build
+
+### apt skips a package
+
+The installer resolves each name first and skips what the configured sources do
+not provide, then prints a summary at the end.
+
+```sh
+apt-cache show <package>
+```
+
+If the package genuinely does not exist for this release, the layer reports it as
+missing in `ominty inspect`. That is acceptable for optional layers; a missing
+*desktop* package is a stop.
+
+### The Quickshell build fails
+
+```sh
+scripts/source/quickshell-build.sh --check-deps
+```
+
+It prints the apt packages it needs (all present in Debian 13). Re-run the build
+alone for a clean error:
+
+```sh
+scripts/source/quickshell-build.sh
+```
+
+### The DMS build fails
+
+```sh
+scripts/source/dms-build.sh
+```
+
+Usually a missing `git`/`make`, a Go download problem, or a shallow clone that
+cannot fetch the pin. `OMINTY_DMS_FORCE=1 scripts/source/dms-build.sh` rebuilds
+even when the stamp matches.
+
+### `install.sh` exits non-zero
+
+That is deliberate: the shell failed its smoke test. The rest of the install
+completed. Read the log, then:
+
+```sh
+scripts/smoke-dms.sh
+scripts/diagnose-dms-shell.sh
+scripts/collect-diagnostics.sh
+```
+
+### `sudo` is not available to the agent
+
+Run the installer in your own terminal:
+
+```sh
+cd <repo> && ./install.sh 2>&1 | tee ~/ominty-install-$(date +%F).log
+```
+
+---
 
 ## Session
 
-### Can't select Niri at the display manager
-
-The Niri `.deb` installs the session file. Verify:
+### Niri is not offered at the display manager
 
 ```sh
-ls /usr/share/wayland-sessions/niri.desktop
+ls /usr/share/wayland-sessions/
 ```
 
-If missing, reinstall the package: `sudo apt-get install -y ./packages/niri_*.deb`
+The bundled `.deb` installs `niri.desktop`. If it is missing,
+`sudo apt-get install --reinstall ./packages/niri_*.deb`.
 
-### After logout, the session doesn't restart cleanly
+### Black screen after login
 
-Check the journal:
+Switch to a TTY and check:
 
 ```sh
-journalctl --user -b -u dms -n 50
-journalctl -b -1 | grep -i niri | tail -20
+niri validate
+journalctl --user -b -u dms.service -n 100
 ```
 
-## Reporting issues
+A rejected `niri validate` is the usual cause. Restore the backup made by
+`install.sh` (`~/.config/niri/config.kdl.bak-ominty-*`) and report the error.
 
-Include:
+### The machine boots into the wrong session
 
-- `cat /etc/os-release`
-- `niri --version`, `quickshell --version`, `dms --version`
-- The failing command and its output
-- `journalctl --user -u dms -n 50` (if DMS-related)
+This is the `session.default` choice. Change it at the display manager, or in
+the display manager's configuration; `install.sh` does not force it unless asked.
+
+---
+
+## Reporting
+
+Send:
+
+1. `diagnostics-<host>-<date>.tar.gz` from `scripts/collect-diagnostics.sh`;
+2. `~/ominty-install-<date>.log` if the problem followed an install;
+3. the exact command that failed and its output.
+
+Do not send `.bak-ominty-*` backups or the dictionary data — they are large and
+not needed.

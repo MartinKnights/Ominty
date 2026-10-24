@@ -2,93 +2,141 @@
 
 **A keyboard-first, action-driven Wayland desktop for Debian-based systems.**
 
-Ominty packages the Ominty Phase 1 reference implementation — built and
-validated on LMDE 7 (Debian 13) — into a one-command installer for other
-Debian-based machines. It brings together:
+Ominty is a complete desktop you can install in one command: Niri as the
+compositor, DankMaterialShell as the shell, and a small CLI and action registry
+that make everything discoverable, scriptable and keyboard-driven. It is built
+and validated on **LMDE 7 / Debian 13**, and supports Ubuntu-family systems
+through the same source-build path.
 
-- **Niri** — the scrollable-tiling Wayland compositor (prebuilt `.deb`)
-- **DankMaterialShell (DMS)** — the Quickshell-based desktop shell
-- **Ominty** — the action registry, CLI, and adapters that make the desktop
-  discoverable and AI-native
-- **matugen** — wallpaper-driven dynamic theming
-- A complete, working configuration set (Niri + DMS + Ominty)
+---
 
-## Quick start
+## Two ways to install
+
+### Do it yourself
 
 ```sh
 git clone --recurse-submodules https://github.com/MartinKnights/Ominty.git
 cd Ominty
+./install.sh --dry-run     # read the plan first
 ./install.sh
 ```
 
-Log out, select the **Niri** session at the display manager, and you're in.
+Log out, pick the **Niri** session at the display manager, and you are in.
+Full guide, including post-install checks: [docs/INSTALL.md](docs/INSTALL.md).
 
-> Requires **Debian 13 (Trixie)** or **LMDE 7**. Needs `sudo`, plus `curl` and
-> `gpg` for the third-party signing keys. See
-> [docs/INSTALL.md](docs/INSTALL.md) for the full guide.
->
-> **Already running Ominty?** Don't reinstall blind — follow
-> [docs/AGENT-UPGRADE.md](docs/AGENT-UPGRADE.md), which is written to be
-> executed by an agent and produces a friction report.
+### Let your AI do it
 
-## Third-party packages
+Copy this into your agent (Claude Code, opencode, Codex, Cursor — anything with
+shell access):
 
-`matugen` and `ghostty` are not in Debian — they come from AvengeMedia's Open
-Build Service, and the installer adds that repository and its signing key
-automatically.
+> You are setting up Ominty on this machine. Read `AGENTS.md`, then follow
+> `docs/AGENT-INSTALL.md` end to end. Do the read-only assessment first, ask me
+> the required questions, show me the dry-run plan, and stop if a gate fails.
+> When it finishes, run the verification scripts and tell me what still needs me.
 
-`dms` is **built from a pinned source commit** (`scripts/source/dms-build.sh`),
-not taken from OBS. The motion/glow overlay in `configs/dms/shell-overlay` is
-coupled to the embedded shell tree, and the OBS package has moved to a newer,
-incompatible generation. Building one pinned commit keeps every machine on the
-same shell, so the overlay applies identically on Debian and Ubuntu families.
+The agent reads the repository as its instructions — assessment, questions,
+plan, install, verification, report. More prompts (upgrade, repair) and the
+rules it must follow: [docs/PROMPTS.md](docs/PROMPTS.md).
 
-`quickshell` comes from Debian's `trixie-backports`; the installer pins it there
-because the OBS copy is deprecated and would otherwise be preferred by version.
+> **Requirements:** Debian 13 (trixie) or LMDE 7 (gigi), x86_64, `sudo`, about
+> 10 GB free and a network connection. Ubuntu 24.04-family is supported through
+> the source build; see [docs/UBUNTU.md](docs/UBUNTU.md).
+
+---
 
 ## What you get
 
 | Surface | Key | What it does |
-|---|---|---|
+| --- | --- | --- |
+| **Ominty Media** | `Shift+Alt+M` | Playlist launcher — one tab per folder, type to filter, Enter to play |
+| **Ominty Dictionary** | `Ctrl+Shift+A` | Offline dictionary and thesaurus for the selected word |
+| **Ominty Reader** | `Super+Alt+O` | Read a document aloud (Piper), with a transport panel |
+| **Ominty Reader** (clipboard) | `Shift+Alt+S` | Read the clipboard aloud |
+| **Ominty Dictation** | `Super+Alt+T` | Speech to text, typed into the focused window (whisper.cpp) |
+| **Ominty Capture** | `Ctrl+Alt+R` | OCR — select an area, get the text on the clipboard |
+| **Ominty Scripts** | `Super+S` | Script launcher / control panel |
 | Interaction explorer | `Super+K` | Browse and run every Ominty action |
 | Universal palette | `Super+Space` | Apps **and** actions together |
-| Cheat sheet | `Super+Shift+S` | Tabbed keybinding reference (GKS) |
+| Cheat sheet | `Super+Shift+S` | Tabbed keybinding reference |
 | AI menu | `Super+A` | Ask AI / open Pi |
 | Power menu | `Super+X` | Restart audio/network, reload Niri, power controls |
 | Wallpaper carousel | `Super+Ctrl+P` | Browse and apply wallpapers |
 
 Everything is driven by the **action registry** — one source of truth that
-generates the Niri keybindings, the DMS launcher, and the cheat sheet.
+generates the Niri keybindings, the DMS launcher, and the cheat sheet. The
+canonical name of every surface is in [docs/NAMING.md](docs/NAMING.md).
 
-## Repository layout
+## How it is put together
 
-```
-Ominty/
-├── install.sh                  # one-command installer (idempotent)
-├── configs/                    # deployable configurations
-│   ├── niri/                   #   compositor config + DMS fragments
-│   ├── dms/                    #   shell settings + plugin settings
-│   └── ominty/                #   action registry config (roles, AI)
-├── packages/                   # prebuilt .debs (niri, xwayland-satellite)
-├── profiles/                   # optional hardware profiles
-│   └── surface-book-1/         #   reference hardware extras
-├── docs/                       # INSTALL, HARDWARE, TROUBLESHOOTING, ARCHITECTURE
-└── ominty-core/               # the implementation (git submodule)
-```
+| Piece | Where it comes from |
+| --- | --- |
+| Niri | bundled `.deb` in `packages/` |
+| Quickshell | **built from a pinned commit** (`v0.3.1`) — the shell is validated against it |
+| DMS (DankMaterialShell) | **built from a pinned commit** with a motion + accent-glow overlay |
+| matugen, ghostty | AvengeMedia Open Build Service |
+| `ominty` CLI, action registry | [`ominty-core`](https://github.com/MartinKnights/ominty-core) submodule |
+| DMS plugins | six shipped here, 14 pinned by commit in `configs/dms/plugins.lock.json` |
+
+DMS is source-built on **both** Debian and Ubuntu families so every machine runs
+the identical shell. That is what makes the overlay, the motion tuning and the
+settings portable — and why the installer runs a shell smoke test and falls back
+rather than leaving a crash loop.
+
+---
 
 ## Documentation
 
-- [INSTALL.md](docs/INSTALL.md) — step-by-step install, post-install checks, AI setup
-- [AGENT-UPGRADE.md](docs/AGENT-UPGRADE.md) — agent-executable upgrade runbook + friction report
-- [NAMING.md](docs/NAMING.md) — the official name of every Ominty surface
-- [HARDWARE.md](docs/HARDWARE.md) — supported hardware, profiles, known devices
-- [TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) — common problems and fixes
+**Start here**
+
+- [INSTALL.md](docs/INSTALL.md) — human install guide, post-install checks, updates
+- [PROMPTS.md](docs/PROMPTS.md) — copy-paste prompts for an AI agent
+- [AGENTS.md](AGENTS.md) — the contract every deploying agent follows
+
+**Runbooks**
+
+- [AGENT-INSTALL.md](docs/AGENT-INSTALL.md) — agent-executable fresh install, with gates
+- [AGENT-UPGRADE.md](docs/AGENT-UPGRADE.md) — agent-executable upgrade + friction report
+- [MIGRATION.md](docs/MIGRATION.md) — assessing an existing Cinnamon/GNOME desktop
+
+**Reference**
+
+- [NAMING.md](docs/NAMING.md) — the official name of every surface
+- [TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) — symptom → diagnosis → fix
+- [INSPECT.md](docs/INSPECT.md) — every field of `ominty inspect --json`
+- [HARDWARE.md](docs/HARDWARE.md) — supported hardware and profiles
 - [ARCHITECTURE.md](docs/ARCHITECTURE.md) — how the pieces fit together
+- [UBUNTU.md](docs/UBUNTU.md) — Ubuntu-family support and the source build
+
+**For maintainers**
+
+- [MAINTAINING.md](docs/MAINTAINING.md) — pins, lockfiles, patches, release checklist
+
+---
+
+## Repository layout
+
+```text
+Ominty/
+├── AGENTS.md                  # contract for a deploying agent
+├── install.sh                 # one-command installer (idempotent)
+├── configs/                   # deployable configuration
+│   ├── niri/                  #   compositor config
+│   ├── dms/                   #   shell settings, plugin lock, overlay patch
+│   ├── bin/ local-bin/ Scripts/  # helper scripts the keybindings call
+│   └── systemd/               #   user units and drop-ins
+├── omi-media/                 # Ominty Media (CLI + DMS popup)
+├── omi-dictionary/            # Ominty Dictionary (CLI + DMS popup)
+├── ominty-plugins/            # shipped plugins + patches for third-party ones
+├── scripts/                   # build, verification, diagnostics, rollback
+├── packages/                  # prebuilt .debs (niri, xwayland-satellite)
+├── profiles/                  # optional hardware profiles
+├── docs/                      # guides, runbooks, reference
+└── ominty-core/               # CLI, action registry, adapters (submodule)
+```
 
 ## Project lineage
 
-Ominty is the distribution layer of the **Ominty** project. The
-implementation (CLI, action registry, adapters, DMS plugins) lives in the
-[`ominty-core`](https://github.com/MartinKnights/ominty-core) submodule; the design
-documentation and progress log live in the umbrella `Ominty` repository.
-A Void Linux port is planned (see the `Ominty-install` project).
+Ominty is the distribution layer of the **Ominty** project. The implementation
+(CLI, action registry, adapters, DMS plugins) lives in the
+[`ominty-core`](https://github.com/MartinKnights/ominty-core) submodule; design
+documentation and progress logs live in the umbrella repository.
