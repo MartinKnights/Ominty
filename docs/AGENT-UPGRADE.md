@@ -364,6 +364,7 @@ produces a report, and that report is the most valuable kind.
 | Overlay exit 3 | Start DMS once, then `configs/dms/shell-overlay/apply.sh`. Record it. |
 | `dms.service` fails to start | `journalctl --user -u dms.service -n 80 --no-pager`; capture; try `systemctl --user restart`. |
 | Shell starts then dies (crash loop) | `scripts/smoke-dms.sh` will report the restart count and the newest Quickshell crash report. Capture `~/ominty-dms-matrix-*.md` from `scripts/diagnose-dms-shell.sh`, then `scripts/rollback-dms.sh --overlay-off`. |
+| A DMS plugin opens blank | Ask the plugin: `dms ipc call <id> viewStatus` — it reports the QML load error. Check `scripts/apply-plugin-patches.sh --check`, apply, then `dms ipc call plugins reload <id>`. Blank is usually a load failure, not missing data. |
 | Bar renders but nothing responds | Stale QML cache: `scripts/rollback-dms.sh --overlay-off` restarts with an isolated cache. Do not hand-delete `~/.cache/quickshell` on a build that is still in use. |
 | Piper/TTS disabled | Allowed (optional layer). Record the warning verbatim. |
 | Matrix produced nothing / no session env | Run `scripts/collect-diagnostics.sh` and send the tarball — it gathers packages, units, journals, crashes, config, plugins and the tool stack without needing a working matrix. |

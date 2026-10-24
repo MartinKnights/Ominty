@@ -195,6 +195,26 @@ Check that all of this actually works, not just that it exists:
 scripts/verify-parity.py     # actions, plugins, bindings, TTS/STT/media/dictionary
 ```
 
+### Third-party plugin patches
+
+`dms plugins restore` (and `dms plugins update`) reset managed plugins to their
+upstream commit, which discards local fixes. Where Ominty needs one, it is kept
+as a patch in `ominty-plugins/patches/` and re-applied by `install.sh` after the
+restore:
+
+| Patch | Why |
+| --- | --- |
+| `dankChat-qt68-contextmenu.patch` | DankChat 0.6.0 uses `Controls.ContextMenu.menu`, which Qt 6.8 removed. The whole `ChatView` fails to load ("Non-existent attached object") and the window renders **blank** — with accounts, bridge and backend all healthy. |
+
+```sh
+scripts/apply-plugin-patches.sh --check   # exit 1 if a patch is stale
+scripts/apply-plugin-patches.sh           # apply what is missing
+```
+
+`verify-parity.py` checks both that the patch is applied and that the running
+plugin reports `loaded: true` (`dms ipc call dankChat viewStatus`). Re-run
+`install.sh` after any `dms plugins update`.
+
 ### Third-party repositories
 
 `matugen` and `ghostty` are **not packaged in Debian**. They come from

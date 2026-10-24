@@ -30,6 +30,7 @@ CONFIG_HOME = Path.home() / ".config"
 DMS_CONFIG = CONFIG_HOME / "DankMaterialShell"
 PLUGIN_DIR = DMS_CONFIG / "plugins"
 GENERATED_BINDINGS = CONFIG_HOME / "ominty" / "generated" / "niri" / "bindings.kdl"
+PATCH_DIR = REPO / "ominty-plugins" / "patches"
 
 OMINTY_PLUGINS = {
     "omintyActions": "ominty-core/shell/dms/ominty-actions",
@@ -112,6 +113,48 @@ def check_plugins() -> None:
             bad("configured plugins are installed", ", ".join(missing))
         else:
             ok(f"all {len(configured)} configured plugins are installed")
+
+
+def check_patches() -> None:
+    """Third-party plugins need local patches that dms plugins restore resets."""
+    section("Plugin patches")
+    if not PATCH_DIR.is_dir():
+        skip("no patches directory")
+        return
+    for patch_file in sorted(PATCH_DIR.glob("*.patch")):
+        plugin = patch_file.name.split("-")[0]
+        target = PLUGIN_DIR / plugin
+        if not target.is_dir():
+            skip(f"{patch_file.name}", f"plugin {plugin} not installed")
+            continue
+        with patch_file.open("rb") as fh:
+            probe = subprocess.run(
+                ["patch", "-d", str(target), "-p1", "--dry-run", "--reverse",
+                 "--forward"],
+                stdin=fh, capture_output=True,
+            )
+        if probe.returncode == 0:
+            ok(f"{patch_file.name} applied")
+        else:
+            bad(f"{patch_file.name} applied",
+                "run scripts/apply-plugin-patches.sh")
+
+    # A patch can apply and still leave the UI broken; ask the plugin itself.
+    dms = have("dms")
+    if dms and (PLUGIN_DIR / "dankChat").is_dir():
+        try:
+            proc = subprocess.run(
+                [dms, "ipc", "call", "dankChat", "viewStatus"],
+                capture_output=True, text=True, timeout=6,
+            )
+            state = json.loads(proc.stdout or "{}")
+        except Exception:  # noqa: BLE001
+            skip("dankChat view loads", "no running shell to ask")
+            return
+        if state.get("loaded"):
+            ok("dankChat view loads")
+        else:
+            bad("dankChat view loads", (state.get("error") or "unknown").strip()[:160])
 
 
 def check_bindings() -> None:
@@ -199,6 +242,7 @@ def main() -> int:
     as_json = "--json" in sys.argv[1:]
     check_actions()
     check_plugins()
+    check_patches()
     check_bindings()
     check_stack()
 

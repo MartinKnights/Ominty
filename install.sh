@@ -696,6 +696,13 @@ if [ "$INSTALL_PLUGINS" -eq 1 ]; then
     warn "No plugin lockfile or DMS binary; skipped third-party plugins."
   fi
 
+  # Restoring the lockfile resets managed plugins to their upstream commit,
+  # which discards local fixes. DankChat's ChatView uses Qt 6.8-removed
+  # attached objects, and without the patch the whole view loads blank.
+  if [ -x "$REPO_DIR/scripts/apply-plugin-patches.sh" ]; then
+    run bash "$REPO_DIR/scripts/apply-plugin-patches.sh"
+  fi
+
   # Let DMS rescan what is now on disk.
   if [ "$DRY_RUN" -eq 0 ] && systemctl --user is-active --quiet dms.service 2>/dev/null; then
     systemctl --user restart dms.service || true

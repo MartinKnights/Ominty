@@ -1,0 +1,31 @@
+diff --git a/ChatView.qml b/ChatView.qml
+index 999de8a..5188de3 100644
+--- a/ChatView.qml
++++ b/ChatView.qml
+@@ -553,7 +553,12 @@ Item {
+                                     background: null
+                                     selectionColor: Theme.primary
+                                     selectedTextColor: Theme.primaryText
+-                                    Controls.ContextMenu.menu: TextMenu {
++                                    TapHandler {
++                                        acceptedButtons: Qt.RightButton
++                                        onTapped: messageTextMenu.popup()
++                                    }
++                                    TextMenu {
++                                        id: messageTextMenu
+                                         editor: messageText
+                                         allowReply: true
+                                         allowEdit: messageRow.modelData.out && !!messageRow.modelData.text
+@@ -728,7 +733,11 @@ Item {
+                                 color: Theme.surfaceText; placeholderTextColor: Theme.surfaceVariantText
+                                 font.family: Theme.fontFamily; font.pixelSize: Theme.fontSizeMedium
+                                 background: null
+-                                Controls.ContextMenu.menu: TextMenu { editor: composer; composerPaste: true }
++                                TapHandler {
++                                    acceptedButtons: Qt.RightButton
++                                    onTapped: composerMenu.popup()
++                                }
++                                TextMenu { id: composerMenu; editor: composer; composerPaste: true }
+                                 onTextChanged: if (text !== root.service.draft) root.service.setDraft(text)
+                                 Keys.onPressed: event => {
+                                     if (event.matches(StandardKey.Paste)) { event.accepted = true; root.pasteClipboard(); return; }
