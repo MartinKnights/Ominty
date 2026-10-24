@@ -207,7 +207,7 @@ PluginComponent {
                     }));
                     if (root._categories.length === 0) {
                         root._activeCat = "";
-                        root._error = "No folders with playlists under the playlist root";
+                        root._error = "No folders with playlists — add .m3u files under ~/Playlist";
                         return;
                     }
                     const keep = root._categories.find(c => c.id === root._activeCat);
