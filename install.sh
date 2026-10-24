@@ -510,15 +510,20 @@ else
 Ominty Media — playlist folders
 ================================
 
-Drop playlist files (*.m3u, *.m3u8, *.pls) into the matching folder:
+Every subfolder here is a tab in the launcher (Shift+Alt+M):
 
   Audio/     audio playlists and audiobooks
   Courses/   lecture and course playlists
   Music/     music playlists
   Video/     video playlists
 
-They appear in the launcher (Shift+Alt+M) grouped by these four tabs, and open
-in the player configured for that category (vlc by default).
+Rename them, delete them, or add your own — the tabs follow. Prefix a name
+(01-Audio) to choose the order. A folder with no playlist is hidden until it
+has one.
+
+Put *.m3u, *.m3u8 or *.pls files in a folder and they appear on the next open.
+The player is vlc by default; override it per folder in
+~/.config/omi/media.toml.
 
 The launcher scans these folders only; it keeps no database.
 PLAYLIST_README

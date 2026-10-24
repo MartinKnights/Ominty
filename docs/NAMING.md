@@ -11,7 +11,7 @@ from the implementation.
 
 | Official name | What it does | Keys | CLI (internal) | DMS plugin | Popup |
 | --- | --- | --- | --- | --- | --- |
-| **Ominty Media** | Playlist launcher: four category tabs, type to filter, Enter to play | `Shift+Alt+M` (alias `Ctrl+Shift+M`) | `omi-media` | `omintyMedia` | — |
+| **Ominty Media** | Playlist launcher: one tab per folder, Tab/arrows to navigate, type to filter, Enter to play | `Shift+Alt+M` (alias `Ctrl+Shift+M`) | `omi-media` | `omintyMedia` | — |
 | **Ominty Dictionary** | Offline dictionary and thesaurus for the selected word | `Ctrl+Shift+A` | `omi-dict` | `omintyDictionary` | — |
 | **Ominty Reader** | Reads a document, the selection, or the clipboard aloud | `Super+Alt+O`, `Ctrl+Alt+S`, `Shift+Alt+S` | `ominty tts`, `tts-pick`, `read-selection` | — | `ominty-tts` |
 | **Ominty Dictation** | Speech to text, typed into the focused window | `Super+Alt+T` (panel), `Super+Alt+D` (toggle) | `ominty voice` | — | `ominty-voice` |

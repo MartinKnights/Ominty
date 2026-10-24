@@ -163,7 +163,10 @@ user-facing strings must use them.
 
 **Ominty Media folders.** The launcher discovers playlists by directory, so
 `install.sh` creates `~/Playlist/{Audio,Courses,Music,Video}` with a README.
-Drop `*.m3u`/`*.m3u8`/`*.pls` files there; there is no database to import.
+Every subfolder is a tab: rename them, add your own, or prefix them (`01-Audio`)
+to control the order. A folder with no playlist is hidden until it contains
+one. Drop `*.m3u`/`*.m3u8`/`*.pls` files in; there is no database to import.
+`media.toml` only overrides the player for a folder.
 
 `omi-dict` and `omi-media` are symlinked into `~/.local/bin` (their `bin/`
 scripts resolve `../src` through the symlink). Ominty's six DMS plugins are
