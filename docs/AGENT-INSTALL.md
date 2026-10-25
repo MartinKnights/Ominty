@@ -71,11 +71,23 @@ Record the values; they go in the report.
 
 ## 2. Phase 1 — get the repository
 
+Use the bootstrap script: it fetches in retryable pieces and continues from
+where a dropped download stopped. Run it as many times as needed.
+
 ```sh
-git clone --recurse-submodules https://github.com/MartinKnights/Ominty.git
-cd Ominty
+if [ -f bootstrap.sh ]; then
+    bash bootstrap.sh
+else
+    curl -fsSLO https://raw.githubusercontent.com/MartinKnights/Ominty/main/bootstrap.sh
+    bash bootstrap.sh
+fi
+cd ~/Ominty
 git submodule status        # must show a commit, not a leading '-'
 ```
+
+If the bundled `.deb`s keep failing on a slow link, copy them from another
+checkout or a USB and point the script at them:
+`OMINTY_PACKAGES_SRC=/path/to/packages bash bootstrap.sh`.
 
 If a checkout already exists, use it:
 

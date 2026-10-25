@@ -120,6 +120,19 @@ else
     done
 fi
 
+section "Bootstrap"
+for f in README.md docs/INSTALL.md docs/AGENT-INSTALL.md docs/PROMPTS.md; do
+    grep -qF "bootstrap.sh" "$f" \
+        && ok "$f documents bootstrap.sh" \
+        || bad "$f does not mention bootstrap.sh"
+done
+while IFS= read -r name; do
+    [ -n "$name" ] || continue
+    [ -f "packages/$name" ] \
+        && ok "bootstrap lists $name and it exists" \
+        || bad "bootstrap.sh lists $name but packages/$name is missing"
+done < <(grep -oE '[A-Za-z0-9._+:-]+\.deb' bootstrap.sh | sort -u)
+
 section "Every reference doc is indexed"
 for f in docs/*.md; do
     case "$f" in

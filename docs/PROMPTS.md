@@ -19,10 +19,11 @@ should become Ominty.
 > install that still has Cinnamon. I want Ominty as the desktop, and there is
 > nothing from Cinnamon I need to keep.
 >
-> 1. The repository should be at `~/Ominty`. If it is not, clone it:
->    `git clone --recurse-submodules https://github.com/MartinKnights/Ominty.git ~/Ominty`
->    then work there. If it already exists, `git pull` and
->    `git submodule update --init --recursive` first.
+> 1. The repository should be at `~/Ominty`. If it is not, fetch it with the
+>    resumable bootstrap:
+>    `curl -fsSLO https://raw.githubusercontent.com/MartinKnights/Ominty/main/bootstrap.sh`
+>    then `bash bootstrap.sh`. Re-run it if a download drops; it continues from
+>    where it stopped. If the checkout exists, `bash bootstrap.sh` updates it.
 > 2. Read `AGENTS.md`, then follow `docs/AGENT-INSTALL.md` end to end.
 > 3. Do the read-only assessment and ask me the required questions before
 >    changing anything. Do not guess answers.

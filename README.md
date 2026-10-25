@@ -15,11 +15,25 @@ through the same source-build path.
 ### Do it yourself
 
 ```sh
-git clone --recurse-submodules https://github.com/MartinKnights/Ominty.git
-cd Ominty
+curl -fsSLO https://raw.githubusercontent.com/MartinKnights/Ominty/main/bootstrap.sh
+bash bootstrap.sh          # resumable: re-run it if the download drops
+cd ~/Ominty
 ./install.sh --dry-run     # read the plan first
 ./install.sh
 ```
+
+`bootstrap.sh` fetches the checkout in retryable pieces (metadata, source,
+submodule, then the bundled `.deb`s) and is safe to run as many times as
+needed. On a slow link, pass a copy of `packages/` instead:
+`OMINTY_PACKAGES_SRC=/media/usb/Ominty/packages bash bootstrap.sh`.
+
+<details><summary>Prefer a plain git clone?</summary>
+
+```sh
+git clone --recurse-submodules https://github.com/MartinKnights/Ominty.git
+cd Ominty
+```
+</details>
 
 Log out, pick the **Niri** session at the display manager, and you are in.
 Full guide, including post-install checks: [docs/INSTALL.md](docs/INSTALL.md).

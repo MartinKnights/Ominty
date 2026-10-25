@@ -331,6 +331,38 @@ copied to the clipboard with `wl-copy`.
 
 ---
 
+## Downloading the repository
+
+### The clone stops partway / `unexpected disconnect`
+
+A plain `git clone` is one ~30 MB transfer (21 MB of it the bundled `.debs`) and
+cannot resume. Use the bootstrap instead:
+
+```sh
+curl -fsSLO https://raw.githubusercontent.com/MartinKnights/Ominty/main/bootstrap.sh
+bash bootstrap.sh          # run it again if it stops; it continues
+```
+
+It downloads in four independent steps, keeps a partial checkout, and skips
+whatever already succeeded on the next run.
+
+### The `.deb` downloads keep failing
+
+They are fetched outside git, one file at a time. Copy them from another
+checkout or a USB:
+
+```sh
+OMINTY_PACKAGES_SRC=/media/usb/Ominty/packages bash bootstrap.sh
+```
+
+Each file is verified with `dpkg-deb --info` before it is moved into place.
+
+### `destination path 'Ominty' already exists`
+
+That is the leftover of a failed clone. `bootstrap.sh` handles it: a directory
+without `.git` is moved to `Ominty.incomplete-<timestamp>` and re-cloned; a
+partial `.git` is reused and the download continues.
+
 ## Installer and build
 
 ### apt skips a package

@@ -153,6 +153,19 @@ and must not keep its own list. When adding a package:
 - if the package name does not exist for this release, `apt_install_resilient`
   skips it and reports — do not add it to a required layer unless it exists.
 
+## The bootstrap uses a sparse checkout
+
+`bootstrap.sh` clones with `--filter=blob:none` and a cone sparse checkout that
+**excludes `packages/`**, because the 21 MB of `.deb`s are fetched separately
+(curl or a local copy). Consequences for a maintainer:
+
+- `packages/*.deb` will not be in the working tree of a bootstrapped clone.
+  Fetch them with `git sparse-checkout add packages`.
+- Bumping a `.deb` means: replace the file, update its name in `bootstrap.sh`
+  (the download list is explicit), and push. Keep the filenames versioned.
+- The `.debs` are deliberately not in the git download path: a single 19 MB
+  promisor fetch is all-or-nothing and dies on slow links.
+
 ## Documentation drift
 
 ```sh

@@ -30,16 +30,29 @@ it the prompt in [PROMPTS.md](PROMPTS.md) and it will follow
 ## 1. Clone
 
 ```sh
+curl -fsSLO https://raw.githubusercontent.com/MartinKnights/Ominty/main/bootstrap.sh
+bash bootstrap.sh
+cd ~/Ominty
+```
+
+`bootstrap.sh` downloads in small steps (metadata, source, submodule, the
+bundled `.deb`s) with timeouts and retries, and **resumes**: re-running it skips
+whatever already succeeded. That matters on a slow or unreliable connection,
+where a single `git clone` of ~30 MB would start over each time.
+
+If the `.deb` downloads are the problem, supply them locally:
+
+```sh
+OMINTY_PACKAGES_SRC=/media/usb/Ominty/packages bash bootstrap.sh
+```
+
+<details><summary>Plain git instead</summary>
+
+```sh
 git clone --recurse-submodules https://github.com/MartinKnights/Ominty.git
 cd Ominty
 ```
-
-The `--recurse-submodules` flag pulls the `ominty-core` implementation
-submodule. If you forgot it:
-
-```sh
-git submodule update --init --recursive
-```
+</details>
 
 ## 2. Install
 
