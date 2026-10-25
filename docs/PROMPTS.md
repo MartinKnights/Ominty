@@ -15,22 +15,26 @@ ask for your `sudo` password at the install step; that is expected.
 Use this for a clean install, or for a machine still running Cinnamon/GNOME that
 should become Ominty.
 
-> You are setting up Ominty on this machine.
+> You are installing Ominty on this machine. It is a fresh LMDE 7 (Debian 13)
+> install that still has Cinnamon. I want Ominty as the desktop, and there is
+> nothing from Cinnamon I need to keep.
 >
-> 1. Get the repository if it is not already here:
->    `git clone --recurse-submodules https://github.com/MartinKnights/Ominty.git`
->    then `cd Ominty`. If a checkout already exists, use it and run
->    `git pull` + `git submodule update --init --recursive`.
+> 1. The repository should be at `~/Ominty`. If it is not, clone it:
+>    `git clone --recurse-submodules https://github.com/MartinKnights/Ominty.git ~/Ominty`
+>    then work there. If it already exists, `git pull` and
+>    `git submodule update --init --recursive` first.
 > 2. Read `AGENTS.md`, then follow `docs/AGENT-INSTALL.md` end to end.
-> 3. Do the read-only assessment before changing anything, and ask me the
->    required questions it lists. Do not guess answers.
-> 4. Show me the plan for approval (the runbook's Phase 5 dry run) and wait for
->    my go-ahead before installing.
+> 3. Do the read-only assessment and ask me the required questions before
+>    changing anything. Do not guess answers.
+> 4. Show me the plan for approval (the Phase 5 dry run) and wait for my
+>    go-ahead before installing.
 > 5. Stop and tell me if a gate fails. Do not improvise around a failure, and do
 >    not remove packages or edit the repository.
-> 6. When it finishes, run the verification scripts in Phase 6 and report what
->    passed, what was skipped, and what still needs me (dictionary data,
->    playlists, wallpaper, AI provider).
+> 6. If logging out would end your own session, stop before the first-login
+>    phase and give me the exact commands to run afterwards.
+> 7. When it finishes, run the verification scripts and write the setup report.
+>    Tell me what passed, what was skipped, and what still needs me (dictionary
+>    data, playlists, wallpaper, AI provider).
 
 ---
 
