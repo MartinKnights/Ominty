@@ -170,9 +170,13 @@ already resolved in the JSON, do not ask it again.
 
 | Choice | What to ask | How the answer is applied |
 | --- | --- | --- |
-| `llm.provider` | Which provider (or `none`), quoting availability | **No installer flag.** The installer writes `~/.config/ominty/ai.toml` from the template if absent. After the install, with consent, set `[ai] default_provider` to the chosen provider. For `none`, set it to `none`: the AI actions then report an unavailable provider and nothing is downloaded. (The `enabled` keys are not read by this build.) |
-| `session.default` | Should Niri become the default session? | **No installer flag.** Niri is selectable at login either way. If they want it default, point them at their display manager's session setting (on LMDE: the *Login Window* tool); do not edit system files yourself. |
+| `session.default` | Should Niri become the default login session? | Pass `--session-default niri` (or omit it for `keep`). It writes `~/.dmrc` with a backup and leaves the old session selectable. |
 | `config.migration` | Is replacing existing configuration (with backups) acceptable? | **No keep flag.** `install.sh` always backs up to `.bak-ominty-<ts>` and replaces. If the user wants to keep their configuration, stop and do the [MIGRATION.md](MIGRATION.md) assessment, or merge manually afterwards. |
+
+**AI is not asked here.** It is set up in the last phase (Phase 10), after the
+desktop is verified, with `scripts/setup-ai.sh`. The installer leaves AI
+unconfigured (`default_provider = "none"`) so nothing about the desktop depends
+on a model download or credentials.
 
 Optional choices, and the exact switch:
 
@@ -182,6 +186,7 @@ Optional choices, and the exact switch:
 | `plugins.dms` | `--no-plugins` (there is no plugins layer) |
 | `tts.enabled` | include or omit `tts` in `--layers` |
 | `desktop.shell_overlay` | no flag — it is applied automatically when the patch matches the built shell |
+| `session.default` | `--session-default niri` or `--session-default keep` |
 
 Never write to the repository to record an answer.
 
@@ -207,11 +212,15 @@ Decide whether sudo is available:
 sudo -n true 2>/dev/null && echo "SUDO: non-interactive" || echo "SUDO: needs a password"
 ```
 
+`install.sh` asks for `sudo` **once at the start** and keeps it alive during
+the source builds. If the agent has no TTY, `sudo -v` fails immediately with a
+clear message instead of hanging later; hand the command to the user.
+
 **Mode A — non-interactive:**
 
 ```sh
 set -o pipefail
-./install.sh --layers "<chosen>" 2>&1 | tee "$HOME/ominty-install-$(date +%F).log"
+./install.sh --layers "<chosen>" [--session-default niri] 2>&1 | tee "$HOME/ominty-install-$(date +%F).log"
 echo "installer exit: ${PIPESTATUS[0]}"
 ```
 
@@ -224,6 +233,15 @@ echo "installer exit: ${PIPESTATUS[0]}"
 packages, Piper). A non-zero exit means a fatal step failed — the log says
 which; it is only the shell smoke test if the last lines say so. Either way,
 capture the log and still write the report.
+
+On this run the installer also:
+
+- installs **zellij** from its upstream release (Debian 13 has no package);
+- provisions `~/Wallpapers` from the system wallpaper sets and renders the
+  niri theme fragment once, so border/glow/animations exist on first login;
+- **fails hard** if the pinned Quickshell build fails, because the DMS shell
+  cannot run on Debian's 0.3.0. Fix the named missing dependency and re-run
+  (or set `OMINTY_ALLOW_DISTRO_QUICKSHELL=1` to accept a broken shell).
 
 The installer **skips the shell smoke test when Niri is not running** (a fresh
 machine, a TTY, or a migration from another desktop). That is expected:
@@ -317,7 +335,34 @@ Never invent dictionary or media content. Ask where the files are.
 
 ---
 
-## 11. Phase 10 — setup report
+## 11. Phase 10 — AI setup (last, optional)
+
+AI is the **last** step: it needs network, a model download and, for Pi,
+credentials. Do not do it earlier, and never let it block the desktop.
+
+Ask once: **Ollama (local models), Pi, both, or none.**
+
+```sh
+scripts/setup-ai.sh --install ollama --provider ollama --model qwen2.5:3b
+scripts/setup-ai.sh --install pi --provider pi
+scripts/setup-ai.sh --install both --provider ollama
+scripts/setup-ai.sh --provider none          # explicit decline
+```
+
+- Ollama is installed from its official installer (needs `sudo`) and one model
+  is pulled.
+- Pi is installed from npm into `~/.local`. It still needs provider credentials
+  (`OPENAI_API_KEY`, or whatever the chosen backend requires); tell the user.
+- `--provider none` records the decision and changes nothing else.
+- Re-running the script is safe; it skips what is already installed.
+
+Then confirm with the user that `Super+A` opens the AI surface. If they chose
+none, say plainly that AI actions are unavailable until they run the script
+again.
+
+---
+
+## 12. Phase 11 — setup report
 
 Write `~/ominty-setup-report-<YYYY-MM-DD>.md`:
 
@@ -332,7 +377,8 @@ Write `~/ominty-setup-report-<YYYY-MM-DD>.md`:
 ## Verdict
 - Install: success / partial / failed / aborted
 - Time: total and per phase
-- User decisions: llm.provider=…, session.default=…, config.migration=…, layers=…
+- User decisions: session.default=…, config.migration=…, layers=…
+- AI: provider=… (or "none / deferred")
 - Manual interventions: <count> (list)
 
 ## Verification
@@ -356,7 +402,7 @@ Print it to the user and give the path.
 
 ---
 
-## 12. Failure playbook
+## 13. Failure playbook
 
 | Symptom | Response |
 | --- | --- |
@@ -366,7 +412,10 @@ Print it to the user and give the path.
 | `inspect` reports blocking `layer.*` findings | Expected before an install: the installer adds those packages. Continue. |
 | Dry run missing a build step | The checkout is stale — redo Phase 1. |
 | apt failure | The installer skips unresolvable names; if the *required* layer is affected, capture the apt output and stop. |
-| Quickshell build fails | Re-run `scripts/source/quickshell-build.sh` alone for a clean error; capture it. |
+| Quickshell build fails | It is fatal by design. `scripts/source/quickshell-build.sh --check-deps` names the missing package (usually `libegl-dev`, `qt6-wayland-private-dev`, or `wayland-protocols` from `trixie-backports`). Fix and re-run. |
+| No bar after the first login | The Qt Wayland platform plugin is missing: install `qt6-wayland`, restart `dms.service`. `verify-upgrade.sh` will also report it. |
+| A plugin opens blank with a QtMultimedia error | Install `qml6-module-qtmultimedia`, then `dms ipc call plugins reload <id>`. |
+| Animations/glow missing | `~/Wallpapers` is empty or `~/.config/niri/dms/ominty-theme.kdl` was never rendered. Run `scripts/provision-wallpapers.sh`, then `matugen image <wallpaper> -c ~/.config/matugen/config.toml -m dark`. |
 | DMS build fails | Re-run `scripts/source/dms-build.sh`; capture it. |
 | Installer exit non-zero | Read `~/ominty-install-<date>.log`. If it ends in the shell smoke test, the installer already fell back; run `scripts/collect-diagnostics.sh`. Otherwise a fatal step failed — report it. |
 | Shell crash-loops after login | `scripts/collect-diagnostics.sh`, keep `~/ominty-dms-matrix-*.md` from `scripts/diagnose-dms-shell.sh`, report. |
@@ -388,11 +437,12 @@ confirmation.
 
 ---
 
-## 13. Definition of done
+## 14. Definition of done
 
-- [ ] Phases 0–8 completed, or stopped at a documented gate.
+- [ ] Phases 0–10 completed, or stopped at a documented gate.
 - [ ] Verification run **after** the first Niri login, with results recorded.
 - [ ] Overlay state recorded as applied or as an explicit finding.
 - [ ] User asked to confirm the visual/animation result and the six keys.
+- [ ] AI asked **last**; the decision recorded (provider installed or explicitly none).
 - [ ] `~/ominty-setup-report-<date>.md` written and its path given to the user.
 - [ ] Repository still clean (`git status --short` empty apart from ignored files).

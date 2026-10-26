@@ -1,18 +1,18 @@
-# Ominty AI configuration — portable defaults
-# docs/12-configuration-layout.md, docs/ai/10 §9, docs/ai/02 §16
+# Ominty AI configuration — portable default.
 #
-# Provider selection for generic AI actions (ai.ask). Users may override
-# through ~/.config/ominty/ai.toml (user configuration wins).
+# AI is configured at the END of setup, by scripts/setup-ai.sh, after the
+# desktop itself has been verified. Until then the default is "none", so no AI
+# action claims a provider that is not installed.
 #
-# Values established by the AI environment audit
-# (docs/implementation/ai-environment-audit.md).
+# User configuration wins over the shipped template; install.sh only writes
+# this file when it does not exist.
 
 [ai]
-default_provider = "pi"
+default_provider = "none"
 
 [ai.providers.pi]
 enabled = true
 
 [ai.providers.ollama]
 enabled = true
-model = "gemma3:4b"
+model = "qwen2.5:3b"

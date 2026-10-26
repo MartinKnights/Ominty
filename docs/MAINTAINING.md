@@ -71,16 +71,27 @@ The pinned DMS shell was validated against Quickshell **0.3.1**. Debian 13 ships
 source-built at all.
 
 1. Set `OMINTY_QUICKSHELL_REF` in `scripts/source/quickshell-build.sh`.
-2. Rebuild and smoke-test:
+2. Check the build dependencies. A fresh Debian 13 needs these, and they are
+   easy to miss because the failure appears late:
+
+   | Need | Package |
+   | --- | --- |
+   | EGL headers (pkg-config `egl`) | `libegl-dev` |
+   | Qt Wayland private headers | `qt6-wayland-private-dev` |
+   | `ext-background-effect-v1.xml` | `wayland-protocols` 1.47 from `trixie-backports` |
+
+   Run `scripts/source/quickshell-build.sh --check-deps`; it checks all three.
+
+3. Rebuild and smoke-test:
 
    ```sh
    scripts/source/quickshell-build.sh
    scripts/smoke-dms.sh --restart
    ```
 
-3. If it fails, run the matrix on a machine with both versions available:
+4. If it fails, run the matrix on a machine with both versions available:
    `scripts/diagnose-dms-shell.sh --quickshell <path>`.
-4. Update `docs/INSTALL.md`, `docs/UBUNTU.md` and `docs/AGENT-INSTALL.md` if the
+5. Update `docs/INSTALL.md`, `docs/UBUNTU.md` and `docs/AGENT-INSTALL.md` if the
    version in prose changes.
 
 Never bump Quickshell and DMS in the same step; if the shell fails you will not
@@ -165,6 +176,21 @@ and must not keep its own list. When adding a package:
   (the download list is explicit), and push. Keep the filenames versioned.
 - The `.debs` are deliberately not in the git download path: a single 19 MB
   promisor fetch is all-or-nothing and dies on slow links.
+
+## Fresh-install test matrix
+
+A release is not ready until a clean machine passes this, in order. Each row
+failed at least once in the 2026-10-26 install:
+
+| Check | Why |
+| --- | --- |
+| `install.sh` completes without `~/.config/systemd/user` pre-created | ordering bug aborted the run |
+| Quickshell 0.3.1 builds | three missing deps, each discovered separately |
+| First Niri login shows the bar | `qt6-wayland` missing → xcb fallback |
+| DankChat opens with content | `qml6-module-qtmultimedia` missing |
+| Windows animate and the accent glow is visible | `~/Wallpapers` empty → no matugen fragment |
+| `verify-upgrade.sh` and `verify-parity.py` both 0 failed | |
+| `scripts/setup-ai.sh` runs last and is optional | |
 
 ## Documentation drift
 

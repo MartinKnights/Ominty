@@ -23,6 +23,7 @@
 #   ./install.sh --profile surface-book-1     # + hardware profile
 #   ./install.sh --dry-run                     # print the plan, change nothing
 #   ./install.sh --no-plugins                 # skip DMS plugin install
+#   ./install.sh --session-default niri       # make Niri the login default
 #   ./install.sh --help
 #
 # Idempotent: safe to re-run. Existing configuration is backed up
@@ -35,6 +36,7 @@ set -euo pipefail
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROFILE=""
 INSTALL_PLUGINS=1
+SESSION_DEFAULT="keep"
 DRY_RUN=0
 OMINTY_CLI="$REPO_DIR/ominty-core/cli/ominty"
 
@@ -225,6 +227,8 @@ while [ $# -gt 0 ]; do
     --layers) LAYERS="$2"; shift 2 ;;
     --dry-run) DRY_RUN=1; shift ;;
     --no-plugins) INSTALL_PLUGINS=0; shift ;;
+    --session-default)
+      SESSION_DEFAULT="${2:?--session-default needs niri or keep}"; shift 2 ;;
     -h|--help)
       awk 'NR>1 && /^#/ { sub(/^# ?/, ""); print; next } NR>1 { exit }' "$0"
       exit 0 ;;
@@ -290,6 +294,26 @@ case "$FAMILY" in
     ;;
 esac
 
+case "$SESSION_DEFAULT" in
+  niri|keep) : ;;
+  *) die "--session-default must be 'niri' or 'keep' (got '$SESSION_DEFAULT')." ;;
+esac
+
+# --- sudo: ask once, keep it alive through the builds ----------------------
+# The source builds can run for half an hour. Without this the sudo timestamp
+# expires and the next apt call prompts on the TTY, which looks like a hang
+# (LMDE 7, 2026-10-25: install stopped at the Niri .deb step).
+SUDO_KEEPALIVE=""
+if [ "$DRY_RUN" -eq 0 ]; then
+  if ! sudo -n true 2>/dev/null; then
+    say "sudo will ask for your password once; it is kept alive during the build."
+    sudo -v || die "sudo is required. Run 'sudo -v' and re-run the installer."
+  fi
+  ( while kill -0 "$$" 2>/dev/null; do sudo -n true 2>/dev/null || true; sleep 50; done ) &
+  SUDO_KEEPALIVE=$!
+  trap '[ -n "${SUDO_KEEPALIVE:-}" ] && kill "$SUDO_KEEPALIVE" 2>/dev/null || true' EXIT
+fi
+
 if [ "$FAMILY" = "ubuntu" ] || [ "$FAMILY" = "mint-ubuntu" ]; then
   # --- 1-2 (Ubuntu): build the desktop from source --------------------------
   # Ubuntu-family systems do not package Quickshell/DMS/matugen and ship a Qt
@@ -332,6 +356,15 @@ else
   # shellcheck disable=SC2086
   [ -z "$OBS_PACKAGES" ] || apt_install_resilient $OBS_PACKAGES
 
+  # Local .debs first: they need sudo, and the builds below can run for half
+  # an hour, after which the sudo timestamp would have expired.
+  if ! have niri; then
+    say "Installing Niri + xwayland-satellite from prebuilt .debs..."
+    run sudo apt-get install -y "$REPO_DIR"/packages/niri_*.deb "$REPO_DIR"/packages/xwayland-satellite_*.deb
+  else
+    say "Niri already installed ($(niri --version 2>/dev/null || echo '?'))."
+  fi
+
   # --- 2a. Quickshell from source (pinned) ----------------------------------
   # The pinned DMS shell is built against Quickshell 0.3.1; Debian 13 ships
   # 0.3.0, on which it segfaults in QQmlTypeLoader (LMDE 7, 2026-10-22).
@@ -343,15 +376,46 @@ else
     apt_install_resilient \
       cmake ninja-build pkg-config qt6-base-dev qt6-base-private-dev \
       qt6-declarative-dev qt6-declarative-private-dev qt6-wayland-dev \
-      qt6-shadertools-dev libcli11-dev libdrm-dev libgbm-dev libjemalloc-dev \
-      libunwind-dev libpam0g-dev libpipewire-0.3-dev libpolkit-agent-1-dev \
-      libwayland-dev wayland-protocols libxkbcommon-dev spirv-tools \
-      libglib2.0-dev libxcb1-dev
+      qt6-wayland-private-dev qt6-shadertools-dev libcli11-dev libdrm-dev \
+      libgbm-dev libjemalloc-dev libunwind-dev libpam0g-dev libegl-dev \
+      libpipewire-0.3-dev libpolkit-agent-1-dev libwayland-dev \
+      wayland-protocols libxkbcommon-dev spirv-tools libglib2.0-dev \
+      libxcb1-dev
+    # wayland-protocols 1.47 (trixie-backports) carries the
+    # ext-background-effect protocol Quickshell 0.3.1 builds against; trixie's
+    # 1.44 does not, and the build fails late without it.
+    if apt-cache policy wayland-protocols 2>/dev/null | grep -q "trixie-backports"; then
+      run sudo apt-get install -y -t trixie-backports wayland-protocols \
+        || warn "Could not upgrade wayland-protocols from trixie-backports."
+    fi
+    if [ "$DRY_RUN" -eq 0 ] \
+       && [ ! -f /usr/share/wayland-protocols/staging/ext-background-effect/ext-background-effect-v1.xml ]; then
+      die "wayland-protocols >= 1.47 is required (ext-background-effect). Enable trixie-backports, install it, then re-run."
+    fi
+
     say "Building pinned Quickshell (this takes a few minutes)..."
-    run bash "$REPO_DIR/scripts/source/quickshell-build.sh" \
-      || warn "Quickshell build failed; the distro build will be used (the shell may not start)."
+    if [ "${OMINTY_ALLOW_DISTRO_QUICKSHELL:-0}" = "1" ]; then
+      run bash "$REPO_DIR/scripts/source/quickshell-build.sh" \
+        || warn "Quickshell build failed; continuing with Debian's 0.3.0 because OMINTY_ALLOW_DISTRO_QUICKSHELL=1."
+    else
+      run bash "$REPO_DIR/scripts/source/quickshell-build.sh" \
+        || die "The pinned Quickshell build failed. The DMS shell requires 0.3.1 and cannot run on Debian's 0.3.0 — fix the dependency above and re-run (or set OMINTY_ALLOW_DISTRO_QUICKSHELL=1 to accept a broken shell)."
+    fi
   fi
 fi
+
+# --- 2a2. zellij (upstream; Debian 13 has no package) ----------------------
+case " $LAYERS " in
+  *" terminal "*)
+    if ! have zellij; then
+      if [ -x "$REPO_DIR/scripts/install-zellij.sh" ]; then
+        say "Installing zellij from the upstream release..."
+        run bash "$REPO_DIR/scripts/install-zellij.sh" \
+          || warn "zellij install failed; the terminal layer will report it missing."
+      fi
+    fi
+    ;;
+esac
 
 # --- 2b. DMS from source ----------------------------------------------------
 # Both families build DMS from the same pinned commit, so the motion/glow
@@ -480,11 +544,57 @@ for f in ai.toml apps.toml; do
   fi
 done
 
+# --- 4a. wallpapers + initial theme ---------------------------------------
+# matugen renders the niri theme fragment (border, accent glow, animation
+# shaders) from a wallpaper. A fresh install has none, so the fragment would
+# never appear and the desktop would stay animationless until a wallpaper was
+# chosen by hand (LMDE 7, 2026-10-26). Provision the system sets and render
+# once.
+say "Provisioning ~/Wallpapers..."
+run bash "$REPO_DIR/scripts/provision-wallpapers.sh"
+if [ "$DRY_RUN" -eq 1 ]; then
+  plan "matugen image <first wallpaper> -c ~/.config/matugen/config.toml -m dark   # render border/glow/animations"
+elif have matugen; then
+  first_wallpaper="$(find "$HOME/Wallpapers" -maxdepth 1 \( -type f -o -type l \) 2>/dev/null | sort | head -1)"
+  if [ -n "$first_wallpaper" ]; then
+    say "Rendering the initial theme from $(basename "$first_wallpaper")..."
+    matugen image "$first_wallpaper" -c "$HOME/.config/matugen/config.toml" -m dark \
+      || warn "matugen could not render the initial theme; DMS will render it when a wallpaper is chosen."
+  else
+    warn "No wallpapers found; the theme fragment will be rendered when a wallpaper is chosen."
+  fi
+fi
+
+# --- 4a2. default login session -------------------------------------------
+if [ "$SESSION_DEFAULT" = "niri" ]; then
+  if [ ! -f /usr/share/wayland-sessions/niri.desktop ]; then
+    warn "niri.desktop is missing; not changing the default session."
+  elif [ "$DRY_RUN" -eq 1 ]; then
+    plan "back up ~/.dmrc and set Session=niri"
+  else
+    say "Setting Niri as the default login session (~/.dmrc)..."
+    if [ -f "$HOME/.dmrc" ]; then
+      cp -a "$HOME/.dmrc" "$HOME/.dmrc.bak-ominty-$(date +%Y%m%d-%H%M%S)"
+      if grep -q '^Session=' "$HOME/.dmrc"; then
+        sed -i 's/^Session=.*/Session=niri/' "$HOME/.dmrc"
+      elif grep -q '^\[Desktop\]' "$HOME/.dmrc"; then
+        sed -i '/^\[Desktop\]/a Session=niri' "$HOME/.dmrc"
+      else
+        printf '[Desktop]\nSession=niri\n' >> "$HOME/.dmrc"
+      fi
+    else
+      printf '[Desktop]\nSession=niri\n' > "$HOME/.dmrc"
+    fi
+    say "Niri is now the default session; other sessions stay selectable."
+  fi
+fi
+
 # --- 4b. Helper scripts + session units ------------------------------------
 # configs/niri/config.kdl binds and spawns these, so they have to exist on a
 # fresh machine. The TTS entries exit quietly when Piper is absent.
 say "Deploying helper scripts..."
-run mkdir -p ~/bin ~/.local/bin ~/Scripts ~/.config/quickshell ~/.config/swaylock
+run mkdir -p ~/bin ~/.local/bin ~/Scripts ~/.config/quickshell ~/.config/swaylock \
+  ~/.config/systemd/user
 for f in "$REPO_DIR"/configs/bin/*; do
   backup_if_changed "$f" ~/bin/"$(basename "$f")"
   run install -m 0755 "$f" ~/bin/
@@ -766,4 +876,9 @@ if [ "$DRY_RUN" -eq 0 ] && [ "${INSTALL_SESSION:-0}" -eq 0 ]; then
 fi
 
 say "Done. Log out and select the 'Niri' session at the display manager."
-say "Next steps: docs/INSTALL.md (post-install checks, AI setup, troubleshooting)."
+if [ "$SESSION_DEFAULT" = "niri" ] && [ "$DRY_RUN" -eq 0 ]; then
+  say "Niri is set as the default session; the old session remains selectable."
+fi
+say "AI is not configured by design. After logging in, when you are ready:"
+say "  scripts/setup-ai.sh --install ollama --provider ollama   # or --install pi --provider pi"
+say "Next steps: docs/INSTALL.md (post-install checks, troubleshooting)."

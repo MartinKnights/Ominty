@@ -286,6 +286,7 @@ This adds `/etc/apt/sources.list.d/danklinux.list` plus the matching keyring in
 | `--profile surface-book-1` | Apply the Surface Book 1 hardware profile (2× scale output, dGPU script). |
 | `--layers "desktop tts terminal editor cli containers browser"` | Choose which layers to install. `tts` is optional; drop it to skip the read-aloud stack. |
 | `--no-plugins` | Skip the DMS plugin installation step. |
+| `--session-default niri` | Make Niri the default login session (`~/.dmrc`, backup kept; other sessions still selectable). |
 | `--help` | Show usage. |
 
 ## 3. First login
@@ -322,10 +323,26 @@ Then exercise the surfaces:
 - `Ctrl+Alt+R` — Ominty Capture (screen OCR)
 - `Super+S` — Ominty Scripts
 
-## 5. AI setup (optional)
+## 5. Wallpapers
 
-The default AI provider is **Pi** (`configs/ominty/ai.toml`). To use a local
-model instead:
+The installer provisions `~/Wallpapers` with symlinks to the system wallpaper
+sets and renders the niri theme fragment once, so border, accent glow and
+animations are present on the first login. Drop your own images in there too;
+the carousel (`Super+Ctrl+P`) lists everything. Changing the wallpaper
+regenerates the palette and the fragment via matugen.
+
+## 6. AI setup (last, optional)
+
+AI is deliberately the **last** step: it needs network, a model download and,
+for Pi, credentials. The installer leaves it unconfigured. Use the helper:
+
+```sh
+scripts/setup-ai.sh --install ollama --provider ollama --model qwen2.5:3b
+scripts/setup-ai.sh --install pi --provider pi
+scripts/setup-ai.sh --provider none
+```
+
+Or configure it by hand. The shipped default is `none`. To use a local model:
 
 1. Install [Ollama](https://ollama.com) and pull a model:
    ```sh
@@ -341,12 +358,6 @@ model instead:
    model = "qwen2.5:3b"
    ```
 3. `Super+A` → **Ask AI** now uses the local model.
-
-## 6. Wallpapers
-
-The wallpaper carousel (`Super+Ctrl+P`) reads `~/Wallpapers`. Drop images
-there. The `dankHooks` plugin regenerates the theme palette automatically
-when the wallpaper changes.
 
 ## 7. Updating
 

@@ -128,16 +128,21 @@ answer.
 
 | Choice | Why it cannot be defaulted |
 | --- | --- |
-| `llm.provider` | Points AI actions at a provider. The installer only writes the template; nothing is downloaded by it. `none` means "leave AI unconfigured". |
-| `session.default` | Changes what the machine boots into; easy to lock the user out. Confirm a fallback session stays selectable. |
+| `session.default` | Changes what the machine boots into; easy to lock the user out. Confirm a fallback session stays selectable. Apply it with `--session-default niri`. |
 | `config.migration` | Replacing an existing configuration is destructive. |
 
-**Only the layer choices are installer flags.** `llm.provider`,
-`session.default` and `config.migration` have no flag: each is applied by
-editing a user file, by leaving the display manager alone, or by stopping and
-doing the migration assessment. The exact mapping is in
-[`docs/AGENT-INSTALL.md`](docs/AGENT-INSTALL.md) Phase 4 — follow that table
-rather than guessing.
+**AI is not asked during the install.** It is the final phase, after
+verification, with `scripts/setup-ai.sh` (Ollama, Pi, or none). The installer
+leaves `default_provider = "none"` so nothing about the desktop depends on a
+model download or credentials.
+
+`--layers`, `--no-plugins` and `--session-default` are the installer flags.
+`config.migration` has none: the installer always backs up and replaces, so if
+the user wants to keep their configuration, stop and use the migration
+assessment. **`llm.provider` is not asked during the install** — AI is the final
+phase, after verification, with `scripts/setup-ai.sh`. The exact mapping is in
+[`docs/AGENT-INSTALL.md`](docs/AGENT-INSTALL.md) Phase 4; follow that rather
+than guessing.
 
 Optional choices (`layers`, `plugins.dms`, `desktop.shell_overlay`,
 `tts.enabled`) may be inferred from the machine, but confirm before acting.
@@ -166,6 +171,7 @@ Show it to the user and wait for a go-ahead, then:
 | `--dry-run` | Print the plan; change nothing |
 | `--no-plugins` | Skip DMS plugins entirely |
 | `--profile <name>` | Apply a hardware profile from `profiles/` |
+| `--session-default niri\|keep` | Set `~/.dmrc` to Niri (backup kept), or leave the login default alone |
 
 **Time and space:** 20–40 minutes and ~10 GB free on a first install (the
 Quickshell and DMS builds, plus a ~142 MB whisper model). On a machine that has
@@ -205,6 +211,10 @@ other.**
 
 The one check no machine can make is visual. Ask the user to confirm the accent
 glow, the spring animation, and the six Ominty keys after logging in.
+
+Only after that, offer AI: `scripts/setup-ai.sh` (the final phase of the install
+runbook). It is last on purpose — a model download or missing credentials must
+never make a working desktop look broken.
 
 ---
 

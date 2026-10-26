@@ -42,10 +42,10 @@ STAMP="$BUILD_DIR/.ominty-quickshell-ref"
 # human can both ask for the same list.
 BUILD_DEPS="cmake ninja-build pkg-config qt6-base-dev qt6-base-private-dev
 qt6-declarative-dev qt6-declarative-private-dev qt6-wayland-dev
-qt6-shadertools-dev libcli11-dev libdrm-dev libgbm-dev libjemalloc-dev
-libunwind-dev libpam0g-dev libpipewire-0.3-dev libpolkit-agent-1-dev
-libwayland-dev wayland-protocols libxkbcommon-dev spirv-tools libglib2.0-dev
-libxcb1-dev"
+qt6-wayland-private-dev qt6-shadertools-dev libcli11-dev libdrm-dev libgbm-dev
+libjemalloc-dev libunwind-dev libpam0g-dev libegl-dev libpipewire-0.3-dev
+libpolkit-agent-1-dev libwayland-dev wayland-protocols libxkbcommon-dev
+spirv-tools libglib2.0-dev libxcb1-dev"
 
 say()  { printf '\033[1;34m[ominty/qs]\033[0m %s\n' "$*"; }
 warn() { printf '\033[1;33m[WARN]\033[0m %s\n' "$*" >&2; }
@@ -57,15 +57,21 @@ check_deps() {
     for c in cmake ninja pkg-config git; do
         have "$c" || missing="$missing $c"
     done
-    # Qt6 dev headers are the ones that actually break the build.
+    # Qt6 dev headers and EGL are what actually break the configure step.
     if have pkg-config; then
-        for m in Qt6Core Qt6Qml Qt6Quick Qt6WaylandClient; do
+        for m in Qt6Core Qt6Qml Qt6Quick Qt6WaylandClient egl; do
             pkg-config --exists "$m" 2>/dev/null || missing="$missing $m-dev"
         done
+    fi
+    # wayland-protocols >= 1.47 (trixie-backports) carries the protocol the
+    # build needs; trixie's 1.44 fails late with a missing XML file.
+    if [ ! -f /usr/share/wayland-protocols/staging/ext-background-effect/ext-background-effect-v1.xml ]; then
+        missing="$missing wayland-protocols>=1.47(trixie-backports)"
     fi
     if [ -n "$missing" ]; then
         warn "missing build dependencies:$missing"
         warn "on Debian 13: sudo apt-get install -y $(echo $BUILD_DEPS | tr '\n' ' ')"
+        warn "and: sudo apt-get install -y -t trixie-backports wayland-protocols"
         return 1
     fi
     return 0

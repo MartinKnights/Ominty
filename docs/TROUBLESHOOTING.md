@@ -50,6 +50,11 @@ systemctl --user cat dms.service | grep ExecStart
   Re-run `./install.sh`; if it fails again, run
   `scripts/diagnose-dms-shell.sh` and keep `~/ominty-dms-matrix-*.md`.
 - Unit not found → `./install.sh` again (it writes the user unit).
+- Journal says `Could not find the Qt platform plugin "wayland"` or
+  `QT_QPA_PLATFORM=xcb` → the Qt Wayland plugin is missing:
+  `sudo apt-get install -y qt6-wayland`, then restart `dms.service`. Without it
+  Quickshell falls back to XWayland, where layer-shell surfaces do not exist,
+  so the bar never maps.
 
 ### The bar appears, then disappears (crash loop)
 
@@ -111,6 +116,24 @@ systemctl --user daemon-reload && systemctl --user restart dms.service
 Exit `1` means the patch no longer matches the build — the stock shell keeps
 running. Report it; do not force it.
 
+**Animations off / no border or glow.** The base config has `animations { off }`;
+the theme fragment turns them on and adds the border, shadow and shaders. That
+fragment is rendered by matugen from a wallpaper:
+
+```sh
+ls ~/Wallpapers | head
+ls ~/.config/niri/dms/ominty-theme.kdl
+```
+
+If `~/Wallpapers` is empty, `scripts/provision-wallpapers.sh` fills it. Then
+render once:
+
+```sh
+matugen image "$(find ~/Wallpapers -maxdepth 1 -type l | head -1)" \
+  -c ~/.config/matugen/config.toml -m dark
+systemctl --user restart niri   # or: niri msg action reload-config
+```
+
 ---
 
 ## DMS plugins
@@ -135,8 +158,12 @@ scripts/apply-plugin-patches.sh
 dms ipc call plugins reload <pluginId>
 ```
 
-The known case is DankChat 0.6.0, which uses a Qt attached object removed in 6.8
-and renders an empty window without the patch.
+Two known cases:
+
+- DankChat 0.6.0 uses a Qt attached object removed in 6.8; the patch fixes it.
+- DankChat's `MediaPlayerView.qml` also imports `QtMultimedia`. Without
+  `qml6-module-qtmultimedia` the component fails and the window is blank.
+  Install it, then reload the plugin.
 
 ### A plugin disappeared after an update
 
@@ -384,8 +411,17 @@ missing in `ominty inspect`. That is acceptable for optional layers; a missing
 scripts/source/quickshell-build.sh --check-deps
 ```
 
-It prints the apt packages it needs (all present in Debian 13). Re-run the build
-alone for a clean error:
+It names missing pieces. The three that a fresh Debian/LMDE install lacks are:
+
+| Symptom in the log | Package |
+| --- | --- |
+| `egl` pkg-config module not found | `libegl-dev` |
+| `QtWaylandClient/…` include path missing | `qt6-wayland-private-dev` |
+| `staging/ext-background-effect/ext-background-effect-v1.xml` missing | `wayland-protocols` from `trixie-backports` (1.47; trixie has 1.44) |
+
+The installer now installs all three and **fails hard** if the build still
+fails, because the pinned DMS shell cannot run on Debian's 0.3.0. Re-run the
+build alone for a clean error:
 
 ```sh
 scripts/source/quickshell-build.sh
@@ -451,9 +487,10 @@ A rejected `niri validate` is the usual cause. Restore the backup made by
 
 ### The machine boots into the wrong session
 
-This is the `session.default` choice. `install.sh` never changes the default
-session — Niri is selectable at login. To make it the default, change it in your
-display manager's configuration.
+This is the `session.default` choice. Re-run `./install.sh --session-default
+niri` to write `~/.dmrc` (a backup is kept; other sessions stay selectable), or
+set it in the display manager's *Login Window* tool. Without the flag the
+installer leaves the default alone.
 
 ---
 

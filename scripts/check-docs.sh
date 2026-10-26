@@ -61,9 +61,14 @@ grep -qF "after login" docs/AGENT-INSTALL.md \
 grep -qF "layer.*" AGENTS.md \
     && ok "AGENTS triage distinguishes layer.* blocking" \
     || bad "AGENTS triage does not distinguish layer.* blocking"
-grep -qiF "installer flag" docs/AGENT-INSTALL.md \
-    && ok "AGENT-INSTALL states which choices have no flag" \
-    || bad "AGENT-INSTALL implies flags that do not exist"
+grep -qF -- "--session-default" docs/AGENT-INSTALL.md \
+    && grep -qF -- "--session-default" AGENTS.md \
+    && ok "session default is documented with its flag" \
+    || bad "session default / --session-default is not documented in both files"
+grep -qF "setup-ai.sh" docs/AGENT-INSTALL.md \
+    && grep -qF "setup-ai.sh" AGENTS.md \
+    && ok "AI setup is documented as the final phase" \
+    || bad "AI setup (scripts/setup-ai.sh) is not documented in both files"
 
 section "Referenced scripts exist"
 missing_scripts=0

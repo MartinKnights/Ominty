@@ -244,7 +244,7 @@ Finding ids are stable and namespaced: `platform`, `hardware.*`, `desktop.*`,
 {
   "ready": false,
   "blocking": ["layer.desktop"],
-  "warnings": ["config.ominty_cli", "choice.llm.provider"],
+  "warnings": ["config.ominty_cli", "choice.session.default"],
   "required_choices": ["session.default", "config.migration"],
   "counts": {"pass": 6, "warn": 12, "fail": 2}
 }
@@ -310,7 +310,7 @@ unavailable-looking option that actually works is worse than a missing detail.
 
 | id | Required | Question |
 | --- | --- | --- |
-| `llm.provider` | yes | Which LLM powers the AI actions, or none? |
+| `llm.provider` | no | Which LLM powers the AI actions, or none? Asked **last**, by `scripts/setup-ai.sh`; never blocks the install. |
 | `layers` | no | Which optional groups to install (multi-select). |
 | `session.default` | yes | Make Niri the default login session, or leave it? |
 | `config.migration` | yes | Replace existing configuration, or keep it? |

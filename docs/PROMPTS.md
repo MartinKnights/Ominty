@@ -34,8 +34,9 @@ should become Ominty.
 > 6. If logging out would end your own session, stop before the first-login
 >    phase and give me the exact commands to run afterwards.
 > 7. When it finishes, run the verification scripts and write the setup report.
->    Tell me what passed, what was skipped, and what still needs me (dictionary
->    data, playlists, wallpaper, AI provider).
+>    AI comes last: ask me then whether to set up Ollama, Pi or neither, and use
+>    `scripts/setup-ai.sh`. Tell me what passed, what was skipped, and what still
+>    needs me (dictionary data, playlists, wallpaper).
 
 ---
 
@@ -71,7 +72,7 @@ should become Ominty.
 | Read the runbook file before acting | Reconstruct the process from memory or from a chat summary |
 | Run `ominty inspect --json` and quote it | Parse human-readable installer output |
 | Show a dry-run plan and wait | Install before the design/questions stage |
-| Ask the required questions one at a time | Default `session.default`, `llm.provider` or `config.migration` |
+| Ask the required questions one at a time | Default `session.default` or `config.migration` |
 | Stop at a failed gate and report | Patch upstream code, remove packages, or edit the repo to "make it work" |
 | Keep the `collect-diagnostics.sh` output | Delete `.bak-ominty-*` backups |
 
